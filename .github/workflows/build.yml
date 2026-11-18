@@ -24,7 +24,10 @@ jobs:
           F=app/src/main/java/com/simplechat/app/net/Provider.kt
           sed -i '/displayName = "DeepSeek V4.1 Flash"/,/contextWindow/ s/1_000_000/131_072/' $F
           sed -i '/displayName = "DeepSeek V4 Pro"/,/contextWindow/ s/1_000_000/131_072/' $F
-      - run: ./gradlew assembleDebug --no-daemon
+      - run: |
+          chmod +x gradlew
+          ./gradlew --version
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -40
       - uses: actions/upload-artifact@v4
         with:
           name: apk
