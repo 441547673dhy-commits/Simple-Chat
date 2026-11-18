@@ -26,9 +26,10 @@ jobs:
           sed -i '/displayName = "DeepSeek V4 Pro"/,/contextWindow/ s/1_000_000/131_072/' $F
       - run: |
           chmod +x gradlew
-          ./gradlew --version
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -40
+          ./gradlew assembleDebug --no-daemon --stacktrace
+      - run: find app/build/outputs -name "*.apk" || true
       - uses: actions/upload-artifact@v4
         with:
           name: apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
