@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
       - run: |
           sudo mkdir -p /opt/android-sdk/cmdline-tools
           curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/clt.zip
@@ -21,13 +21,22 @@ jobs:
           sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
           sudo ln -sfn /opt/android-sdk/platforms/android-37.0 /opt/android-sdk/platforms/android-37
       - run: |
+          mkdir -p ~/.android
+          keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+      - run: |
           F=app/src/main/java/com/simplechat/app/net/Provider.kt
           sed -i '/displayName = "DeepSeek V4.1 Flash"/,/contextWindow/ s/1_000_000/131_072/' $F
           sed -i '/displayName = "DeepSeek V4 Pro"/,/contextWindow/ s/1_000_000/131_072/' $F
       - run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
-      - run: find app/build/outputs -name "*.apk" || true
+          set +e
+          ./gradlew assembleDebug --no-daemon --stacktrace > /tmp/build.log 2>&1
+          code=$?
+          tail -20 /tmp/build.log
+          if [ $code -ne 0 ]; then
+            echo "::error::$(grep -A10 'What went wrong' /tmp/build.log | tr '\n' ' ' | sed 's/%/%25/g' | cut -c1-900)"
+            exit $code
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: apk
