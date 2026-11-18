@@ -1,0 +1,24 @@
+name: build
+on: workflow_dispatch
+jobs:
+  b:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: |
+          sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+      - run: |
+          F=app/src/main/java/com/simplechat/app/net/Provider.kt
+          sed -i '/displayName = "DeepSeek V4.1 Flash"/,/contextWindow/ s/1_000_000/131_072/' $F
+          sed -i '/displayName = "DeepSeek V4 Pro"/,/contextWindow/ s/1_000_000/131_072/' $F
+      - run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: app/build/outputs/apk/debug/*.apk
