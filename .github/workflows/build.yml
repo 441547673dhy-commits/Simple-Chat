@@ -3,16 +3,23 @@ on: workflow_dispatch
 jobs:
   b:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      ANDROID_HOME: /opt/android-sdk
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - run: |
-          sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
-          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+          sudo mkdir -p /opt/android-sdk/cmdline-tools
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/clt.zip
+          sudo unzip -qo /tmp/clt.zip -d /opt/android-sdk/cmdline-tools
+          sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
+          yes | sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+          sudo ln -sfn /opt/android-sdk/platforms/android-37.0 /opt/android-sdk/platforms/android-37
       - run: |
           F=app/src/main/java/com/simplechat/app/net/Provider.kt
           sed -i '/displayName = "DeepSeek V4.1 Flash"/,/contextWindow/ s/1_000_000/131_072/' $F
