@@ -209,6 +209,7 @@ private enum class ApiStylePreference(val labelRes: Int) {
 fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    conversationId: String? = null,
 ) {
     val colors = LocalChatColors.current
     val context = LocalContext.current
@@ -249,6 +250,15 @@ fun SettingsScreen(
 
     var personaFileName by remember { mutableStateOf("") }
     var personaLogName by remember { mutableStateOf("") }
+    // 会话级绑定：这里显示的是"这个会话实际生效的那一个"，不是全局默认
+    var personaUri by remember { mutableStateOf("") }
+    var personaLogUri by remember { mutableStateOf("") }
+    LaunchedEffect(conversationId) {
+        personaUri = store.personaFileUriFor(conversationId)
+        personaLogUri = store.personaLogUriFor(conversationId)
+        personaFileName = personaUri.substringAfterLast('/').ifBlank { "未绑定" }
+        personaLogName = personaLogUri.substringAfterLast('/').ifBlank { "未绑定" }
+    }
     val personaPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -260,7 +270,8 @@ fun SettingsScreen(
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                     )
                 }
-                store.setPersonaFileUri(uri.toString())
+                store.setPersonaFileUri(uri.toString(), conversationId)
+                personaUri = uri.toString()
                 personaFileName = uri.lastPathSegment.orEmpty()
             }
         }
@@ -278,7 +289,8 @@ fun SettingsScreen(
                             Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                     )
                 }
-                store.setPersonaLogUri(uri.toString())
+                store.setPersonaLogUri(uri.toString(), conversationId)
+                personaLogUri = uri.toString()
                 personaLogName = uri.lastPathSegment.orEmpty()
             }
         }
@@ -612,13 +624,13 @@ fun SettingsScreen(
                             },
                             onDeleteAll = { dialog = SettingsDialog.DeleteAll },
                             personaFileName = personaFileName.ifBlank {
-                                stored.personaFileUri.substringAfterLast('/').ifBlank { "未绑定" }
+                                personaUri.substringAfterLast('/').ifBlank { "未绑定" }
                             },
                             onPickPersona = {
                                 personaPicker.launch(arrayOf("text/*", "application/octet-stream"))
                             },
                             personaLogName = personaLogName.ifBlank {
-                                stored.personaLogUri.substringAfterLast('/').ifBlank { "未绑定" }
+                                personaLogUri.substringAfterLast('/').ifBlank { "未绑定" }
                             },
                             onPickLog = {
                                 logPicker.launch(arrayOf("text/*", "application/octet-stream"))

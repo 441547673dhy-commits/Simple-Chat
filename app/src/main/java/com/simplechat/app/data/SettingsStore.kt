@@ -239,14 +239,40 @@ class SettingsStore(
         )
     }
 
-    /** 绑定角色档案文件（SAF URI）。传空串解除绑定。 */
-    suspend fun setPersonaFileUri(uri: String) {
-        preferences.edit { it[Keys.PERSONA_FILE] = uri }
+    /**
+     * 绑定注入文件（SAF URI）。传空串解除绑定。
+     *
+     * [conversationId] 非空时写的是**这个会话**的绑定，为空则写全局默认。
+     * 四条鱼各自绑定不同文件，靠的就是这层；没有它，点进哪个会话都读同一份。
+     */
+    suspend fun setPersonaFileUri(uri: String, conversationId: String? = null) {
+        preferences.edit { it[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")] = uri }
     }
 
-    /** 读取角色档案全文；未绑定或读失败返回空串。 */
-    suspend fun readPersonaFile(): String {
-        val uri = flow.first().personaFileUri
+    /**
+     * 会话级 key。
+     *
+     * 刻意用 DataStore 的动态键而不是给 Room 加列：加列要写迁移、要升版本号，
+     * 而这里存的只是"这个会话用哪个文件"，丢了下次重选一次就行，不值得动数据库。
+     */
+    private fun personaKey(
+        conversationId: String?,
+        global: Preferences.Key<String>,
+        prefix: String,
+    ): Preferences.Key<String> =
+        if (conversationId.isNullOrBlank()) global
+        else stringPreferencesKey(prefix + "_" + conversationId)
+
+    /** 读取注入文件全文；未绑定或读失败返回空串。会话级优先，取不到回落全局。 */
+    suspend fun readPersonaFile(conversationId: String? = null): String {
+        val prefs = flow.first()
+        val uri = if (conversationId.isNullOrBlank()) {
+            prefs.personaFileUri
+        } else {
+            prefs[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
+                .orEmpty()
+                .ifBlank { prefs.personaFileUri }
+        }
         if (uri.isBlank()) return ""
         return withContext(Dispatchers.IO) {
             runCatching {
@@ -257,9 +283,25 @@ class SettingsStore(
         }
     }
 
-    /** 绑定记忆日志（SAF URI）。传空串解除绑定。 */
-    suspend fun setPersonaLogUri(uri: String) {
-        preferences.edit { it[Keys.PERSONA_LOG] = uri }
+    /** 绑定记忆日志（SAF URI）。传空串解除绑定。同样按会话存。 */
+    suspend fun setPersonaLogUri(uri: String, conversationId: String? = null) {
+        preferences.edit { it[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")] = uri }
+    }
+
+    /** 取这个会话实际生效的注入文件 URI（会话级优先，回落全局）。 */
+    suspend fun personaFileUriFor(conversationId: String?): String {
+        val prefs = flow.first()
+        if (conversationId.isNullOrBlank()) return prefs.personaFileUri
+        return prefs[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
+            .orEmpty().ifBlank { prefs.personaFileUri }
+    }
+
+    /** 取这个会话实际生效的日志 URI。 */
+    suspend fun personaLogUriFor(conversationId: String?): String {
+        val prefs = flow.first()
+        if (conversationId.isNullOrBlank()) return prefs.personaLogUri
+        return prefs[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
+            .orEmpty().ifBlank { prefs.personaLogUri }
     }
 
     /** 是否只发送最近一段历史。 */
@@ -273,8 +315,15 @@ class SettingsStore(
      * 刻意不写注入文件：那个文件每轮会被拼进系统提示词，写进去就等于
      * 把这一轮的输出变成下一轮的前置条件，跨会话互相污染（见 [StoredSettings.personaFileUri]）。
      */
-    suspend fun appendPersonaLog(text: String) {
-        val uri = flow.first().personaLogUri
+    suspend fun appendPersonaLog(text: String, conversationId: String? = null) {
+        val prefs = flow.first()
+        val uri = if (conversationId.isNullOrBlank()) {
+            prefs.personaLogUri
+        } else {
+            prefs[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
+                .orEmpty()
+                .ifBlank { prefs.personaLogUri }
+        }
         if (uri.isBlank() || text.isBlank()) return
         withContext(Dispatchers.IO) {
             runCatching {

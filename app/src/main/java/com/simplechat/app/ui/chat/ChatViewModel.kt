@@ -1735,7 +1735,7 @@ class ChatViewModel(
                         }?.content?.trim()
                         if (!replyText.isNullOrBlank() && !userText.isNullOrBlank()) {
                             // 只写记忆日志：注入文件是只读的，写进去会跨会话污染（见 SettingsStore）
-                            settingsStore.appendPersonaLog("用户：$userText\n\n角色：$replyText")
+                            settingsStore.appendPersonaLog("用户：$userText\n\n角色：$replyText", conversationId)
                         }
                     }
                 }
@@ -1766,7 +1766,7 @@ class ChatViewModel(
         val active = validCompaction(messages, compaction)
         val system = buildString {
             // 角色档案：原文注入，不改写、不摘要。绑定后每轮都会带上。
-            val persona = settingsStore.readPersonaFile()
+            val persona = settingsStore.readPersonaFile(currentConversationId)
             if (persona.isNotBlank()) {
                 append(persona.trim())
                 appendLine().appendLine()
@@ -2008,7 +2008,7 @@ class ChatViewModel(
         val request = mutableListOf<OutMessageDto>()
 
         val system = buildString {
-            val persona = settingsStore.readPersonaFile()
+            val persona = settingsStore.readPersonaFile(currentConversationId)
             if (persona.isNotBlank()) {
                 append(persona.trim())
                 appendLine().appendLine()

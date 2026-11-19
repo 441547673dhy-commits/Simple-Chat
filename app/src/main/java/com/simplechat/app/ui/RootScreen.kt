@@ -350,7 +350,10 @@ fun RootScreen(chat: ChatViewModel? = null, history: HistoryViewModel? = null) {
                             },
                         )
 
-                        Route.SETTINGS -> SettingsScreen(onBack = { route = Route.CHAT })
+                        Route.SETTINGS -> SettingsScreen(
+                            onBack = { route = Route.CHAT },
+                            conversationId = chatViewModel.currentConversationId,
+                        )
                     }
                 }
             }
