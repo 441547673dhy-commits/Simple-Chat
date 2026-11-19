@@ -143,10 +143,28 @@ data class StoredSettings(
     val modelIds: List<String> = emptyList(),
 
     /**
-     * 角色档案文件（SAF URI）。每轮发送前读取它的内容拼进系统提示词，
-     * 回复完成后把本轮问答原文追加回去。空串 = 未启用。
+     * 注入文件（SAF URI）。每轮发送前读取它的内容拼进系统提示词。
+     *
+     * **只读**：删掉 v1.1.5 里"回复完再追加回去"的那一半 —— 注入与追加是同一个文件时，
+     * 上一轮的回答会被写进下一轮的注入块，同一个角色在不同会话里互相污染
+     * （表现为她开始用"档案摘要"的口吻复述，而不是按自己的人设说话）。
      */
     val personaFileUri: String = "",
+
+    /**
+     * 记忆日志（SAF URI）。每轮回复完成后把「用户/角色」原文追加到这里。
+     *
+     * 与注入文件分开：日志只增不改、永不注入，需要时由外部（人、脚本、检索）
+     * 决定把哪一段挪进注入文件。空串 = 不记录。
+     */
+    val personaLogUri: String = "",
+
+    /**
+     * 发送时只带最近的一段历史（见 `trimToRecentBudget`）。
+     *
+     * 关掉 = 全量上传，长会话会把整段历史每轮重发一遍，流量按 MB 计、客户端容易卡死。
+     */
+    val recentOnly: Boolean = false,
 
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
@@ -215,6 +233,8 @@ class SettingsStore(
             ttsVoiceLabel = prefs[Keys.TTS_VOICE_LABEL] ?: StoredSettings().ttsVoiceLabel,
             modelIds = ModelIdList.decode(prefs[Keys.MODEL_IDS]),
             personaFileUri = prefs[Keys.PERSONA_FILE].orEmpty(),
+            personaLogUri = prefs[Keys.PERSONA_LOG].orEmpty(),
+            recentOnly = prefs[Keys.RECENT_ONLY] ?: false,
 
         )
     }
@@ -237,17 +257,29 @@ class SettingsStore(
         }
     }
 
-    /** 把本轮问答原文追加到角色档案文件末尾。 */
-    suspend fun appendPersonaFile(text: String) {
-        val uri = flow.first().personaFileUri
+    /** 绑定记忆日志（SAF URI）。传空串解除绑定。 */
+    suspend fun setPersonaLogUri(uri: String) {
+        preferences.edit { it[Keys.PERSONA_LOG] = uri }
+    }
+
+    /** 是否只发送最近一段历史。 */
+    suspend fun setRecentOnly(enabled: Boolean) {
+        preferences.edit { it[Keys.RECENT_ONLY] = enabled }
+    }
+
+    /**
+     * 把本轮问答原文追加到**记忆日志**末尾。
+     *
+     * 刻意不写注入文件：那个文件每轮会被拼进系统提示词，写进去就等于
+     * 把这一轮的输出变成下一轮的前置条件，跨会话互相污染（见 [StoredSettings.personaFileUri]）。
+     */
+    suspend fun appendPersonaLog(text: String) {
+        val uri = flow.first().personaLogUri
         if (uri.isBlank() || text.isBlank()) return
         withContext(Dispatchers.IO) {
             runCatching {
-                val existing = context.contentResolver.openInputStream(Uri.parse(uri))?.use {
-                    it.readBytes().toString(Charsets.UTF_8)
-                }.orEmpty()
-                context.contentResolver.openOutputStream(Uri.parse(uri), "wt")?.use { out ->
-                    out.write((existing + "\n\n" + text).toByteArray(Charsets.UTF_8))
+                context.contentResolver.openOutputStream(Uri.parse(uri), "wa")?.use { out ->
+                    out.write((text + "\n\n").toByteArray(Charsets.UTF_8))
                 }
             }
         }
@@ -583,6 +615,8 @@ class SettingsStore(
         /** 当前端点 `/models` 拉回来的 id，换行分隔（[ModelIdList]）。 */
         val MODEL_IDS = stringPreferencesKey("model_ids")
         val PERSONA_FILE = stringPreferencesKey("persona_file")
+        val PERSONA_LOG = stringPreferencesKey("persona_log")
+        val RECENT_ONLY = booleanPreferencesKey("recent_only")
 
     }
 }

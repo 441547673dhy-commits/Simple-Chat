@@ -85,6 +85,14 @@ private const val WarmTailMessages = 10
  */
 private const val WarmTailMaxChars = 24_000
 
+/**
+ * 「只发最近内容」时允许发送的字符预算，约 4 万 token。
+ *
+ * 取值参照：一轮正常对话的原文在 1–2 KB，4 万 token 大约覆盖最近一百来条，
+ * 足够让语气与上下文接上；再往上加，收益迅速变小、卡死风险迅速变大。
+ */
+private const val RECENT_BUDGET_CHARS = 120_000
+
 class ChatViewModel(
     private val chatApi: ChatApi,
     private val settingsStore: SettingsStore,
@@ -1722,7 +1730,8 @@ class ChatViewModel(
                             it.role == MessageRole.USER && it.id != replyId
                         }?.content?.trim()
                         if (!replyText.isNullOrBlank() && !userText.isNullOrBlank()) {
-                            settingsStore.appendPersonaFile("用户：$userText\n\n角色：$replyText")
+                            // 只写记忆日志：注入文件是只读的，写进去会跨会话污染（见 SettingsStore）
+                            settingsStore.appendPersonaLog("用户：$userText\n\n角色：$replyText")
                         }
                     }
                 }
@@ -1772,8 +1781,13 @@ class ChatViewModel(
          * 续写时把这条 assistant 从历史里摘出去：它要以**末尾前缀**的身份出现，
          * 留在历史里就是同一轮回答发了两遍，服务端会把它当成两个不同的回答。
          */
-        val path = orderedOutgoingMessages(messages, active)
-            .filter { it.id != prefix?.id }
+        val outgoingPath = orderedOutgoingMessages(messages, active)
+        // 只发最近一段：整段历史每轮重传 = 卡死 + 流量按 MB 计（见 trimToRecentBudget）
+        val path = (if (settings.recentOnly) {
+            trimToRecentBudget(outgoingPath, RECENT_BUDGET_CHARS)
+        } else {
+            outgoingPath
+        }).filter { it.id != prefix?.id }
             /*
              * 附件在这里整理：落盘字节读回内存（`toDataUrl()` / image block 只认内联），
              * 图片再按真实内容校正（见 `ApiImage`）。
@@ -2015,7 +2029,10 @@ class ChatViewModel(
         }
 
         // 顺序规则见 `orderedOutgoingMessages`（纯函数，有单测钉死）
-        orderedOutgoingMessages(messages, active).forEach { message ->
+        val outgoingList = orderedOutgoingMessages(messages, active).let { list ->
+            if (settings.recentOnly) trimToRecentBudget(list, RECENT_BUDGET_CHARS) else list
+        }
+        outgoingList.forEach { message ->
             /*
              * 空消息不发：历史里出错/被中断的 assistant、既没正文也没附件的 user
              * 是可能存在的，而部分兼容网关对空 `content` 直接 400 ——

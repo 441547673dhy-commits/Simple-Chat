@@ -44,3 +44,42 @@ internal fun orderedOutgoingMessages(
         else -> filtered.drop(firstUser)
     }
 }
+
+/**
+ * 只保留最近的一段历史，控制在 [maxChars] 个字符以内。
+ *
+ * 为什么需要它：一段长会话（58 万 token ≈ 2.9 MB 文本）如果每轮全量上传，
+ * 客户端要先拼一个巨型字符串再序列化 —— 卡死、流量按 MB 计，都是这么来的。
+ * 这不是"上限"问题（上限该由服务端决定），而是**每次实际发送多少**的问题。
+ *
+ * 规则：
+ * 1. 从末尾往前累加，超出预算就停 —— 丢的永远是最老的部分
+ * 2. 截断之后**首条必须是 user**：以 assistant 开头等于一段没有问题的回答，
+ *    服务端会直接 400，所以要么去掉，要么往前多带一条 user
+ * 3. 预算小于单条消息时，**至少保留最后一条**，不返回空列表
+ */
+internal fun trimToRecentBudget(messages: List<UiMessage>, maxChars: Int): List<UiMessage> {
+    if (maxChars <= 0 || messages.isEmpty()) return messages
+
+    var used = 0
+    var start = messages.size
+    while (start > 0) {
+        val next = messages[start - 1]
+        val cost = next.content.length + if (next.attachments.isEmpty()) 0 else DEFAULT_ATTACHMENT_CHARS
+        if (used + cost > maxChars && start < messages.size) break
+        used += cost
+        start--
+    }
+
+    var kept = messages.subList(start, messages.size).toList()
+    val firstUser = kept.indexOfFirst { it.role == MessageRole.USER }
+    kept = when {
+        firstUser < 0 -> kept
+        firstUser == 0 -> kept
+        else -> kept.drop(firstUser)
+    }
+    return kept
+}
+
+/** 附件在预算里的粗估：图片按固定值算，反正一张就上兆字节。 */
+private const val DEFAULT_ATTACHMENT_CHARS = 4_000

@@ -248,6 +248,7 @@ fun SettingsScreen(
     var presets by remember { mutableStateOf<List<Preset>>(emptyList()) }
 
     var personaFileName by remember { mutableStateOf("") }
+    var personaLogName by remember { mutableStateOf("") }
     val personaPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -261,6 +262,24 @@ fun SettingsScreen(
                 }
                 store.setPersonaFileUri(uri.toString())
                 personaFileName = uri.lastPathSegment.orEmpty()
+            }
+        }
+    }
+
+    val logPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }
+                store.setPersonaLogUri(uri.toString())
+                personaLogName = uri.lastPathSegment.orEmpty()
             }
         }
     }
@@ -598,6 +617,14 @@ fun SettingsScreen(
                             onPickPersona = {
                                 personaPicker.launch(arrayOf("text/*", "application/octet-stream"))
                             },
+                            personaLogName = personaLogName.ifBlank {
+                                stored.personaLogUri.substringAfterLast('/').ifBlank { "未绑定" }
+                            },
+                            onPickLog = {
+                                logPicker.launch(arrayOf("text/*", "application/octet-stream"))
+                            },
+                            recentOnly = stored.recentOnly,
+                            onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
                         )
 
                         SettingsPage.API -> ApiPage(
@@ -1381,17 +1408,35 @@ private fun DataPage(
     onDeleteAll: () -> Unit,
     personaFileName: String = "",
     onPickPersona: () -> Unit = {},
+    personaLogName: String = "",
+    onPickLog: () -> Unit = {},
+    recentOnly: Boolean = false,
+    onToggleRecent: (Boolean) -> Unit = {},
 ) {
     SettingsSectionLabel("角色档案")
     SettingsCard {
         SettingsActionRow(
-            label = "角色档案文件",
+            label = "注入文件（只读）",
             hint = if (personaFileName.isBlank()) {
-                "未绑定：点这里选一个 .md 或 .txt，每轮读取并追加对话原文"
+                "未绑定：每轮读取并拼进系统提示词。代码永不写入它"
             } else {
                 personaFileName
             },
             onClick = onPickPersona,
+        )
+        SettingsActionRow(
+            label = "记忆日志（追加）",
+            hint = if (personaLogName.isBlank()) {
+                "未绑定：每轮把「用户 / 角色」原文追加到这里，不会被注入"
+            } else {
+                personaLogName
+            },
+            onClick = onPickLog,
+        )
+        SettingsSwitchRow(
+            label = "只发送最近内容（约 12 万字符）",
+            checked = recentOnly,
+            onCheckedChange = onToggleRecent,
         )
     }
 
