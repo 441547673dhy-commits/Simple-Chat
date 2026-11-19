@@ -1783,7 +1783,8 @@ class ChatViewModel(
          */
         val outgoingPath = orderedOutgoingMessages(messages, active)
         // 只发最近一段：整段历史每轮重传 = 卡死 + 流量按 MB 计（见 trimToRecentBudget）
-        val path = (if (settings.recentOnly) {
+        val recentOnly = settingsStore.flow.first().recentOnly
+        val path = (if (recentOnly) {
             trimToRecentBudget(outgoingPath, RECENT_BUDGET_CHARS)
         } else {
             outgoingPath
@@ -2029,8 +2030,9 @@ class ChatViewModel(
         }
 
         // 顺序规则见 `orderedOutgoingMessages`（纯函数，有单测钉死）
+        val recentOnly = settingsStore.flow.first().recentOnly
         val outgoingList = orderedOutgoingMessages(messages, active).let { list ->
-            if (settings.recentOnly) trimToRecentBudget(list, RECENT_BUDGET_CHARS) else list
+            if (recentOnly) trimToRecentBudget(list, RECENT_BUDGET_CHARS) else list
         }
         outgoingList.forEach { message ->
             /*
