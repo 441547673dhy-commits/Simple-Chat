@@ -27,6 +27,9 @@ jobs:
       - run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon > /tmp/b.log 2>&1 || {
+            echo "===== Kotlin 错误 ====="
+            grep -E '^e: |error:' /tmp/b.log | head -40
+            echo "===== 任务失败摘要 ====="
             grep -A8 'What went wrong' /tmp/b.log | head -12
             echo "::error::$(grep -A8 'What went wrong' /tmp/b.log | tr '\n' ' ' | cut -c1-800)"
             exit 1
