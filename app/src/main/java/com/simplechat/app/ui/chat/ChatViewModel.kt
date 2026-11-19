@@ -1715,6 +1715,16 @@ class ChatViewModel(
                 BackgroundGeneration.sync(false)
                 if (persisted && status == MessageStatus.DONE && conversationId == currentConversationId) {
                     replyCompletions.tryEmit(CompletedReply(conversationId, replyId))
+                    // 角色档案：把本轮问答原文追加回去，换会话时还能接着用。
+                    runCatching {
+                        val replyText = messages.firstOrNull { it.id == replyId }?.content?.trim()
+                        val userText = messages.lastOrNull {
+                            it.role == MessageRole.USER && it.id != replyId
+                        }?.content?.trim()
+                        if (!replyText.isNullOrBlank() && !userText.isNullOrBlank()) {
+                            settingsStore.appendPersonaFile("用户：$userText\n\n角色：$replyText")
+                        }
+                    }
                 }
             }
 
@@ -1742,6 +1752,12 @@ class ChatViewModel(
         skippedNoVision = 0; skippedUnreadable = 0
         val active = validCompaction(messages, compaction)
         val system = buildString {
+            // 角色档案：原文注入，不改写、不摘要。绑定后每轮都会带上。
+            val persona = settingsStore.readPersonaFile()
+            if (persona.isNotBlank()) {
+                append(persona.trim())
+                appendLine().appendLine()
+            }
             append(settings.composedSystemPrompt(presets))
             if (active != null && active.summary.isNotBlank()) {
                 if (isNotEmpty()) appendLine().appendLine()
@@ -1972,7 +1988,14 @@ class ChatViewModel(
         skippedNoVision = 0; skippedUnreadable = 0
         val request = mutableListOf<OutMessageDto>()
 
-        val system = settings.composedSystemPrompt(presets)
+        val system = buildString {
+            val persona = settingsStore.readPersonaFile()
+            if (persona.isNotBlank()) {
+                append(persona.trim())
+                appendLine().appendLine()
+            }
+            append(settings.composedSystemPrompt(presets))
+        }
         if (system.isNotBlank()) {
             request += OutMessageDto(role = "system", content = MessageContent.text(system))
         }

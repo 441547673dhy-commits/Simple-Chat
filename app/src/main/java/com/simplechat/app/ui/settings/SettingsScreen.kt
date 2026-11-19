@@ -247,6 +247,24 @@ fun SettingsScreen(
     }
     var presets by remember { mutableStateOf<List<Preset>>(emptyList()) }
 
+    var personaFileName by remember { mutableStateOf("") }
+    val personaPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }
+                store.setPersonaFileUri(uri.toString())
+                personaFileName = uri.lastPathSegment.orEmpty()
+            }
+        }
+    }
+
     /*
      * 朗读音色。
      *
@@ -574,6 +592,12 @@ fun SettingsScreen(
                                 importLauncher.launch(arrayOf("*/*"))
                             },
                             onDeleteAll = { dialog = SettingsDialog.DeleteAll },
+                            personaFileName = personaFileName.ifBlank {
+                                stored.personaFileUri.substringAfterLast('/').ifBlank { "未绑定" }
+                            },
+                            onPickPersona = {
+                                personaPicker.launch(arrayOf("text/*", "application/octet-stream"))
+                            },
                         )
 
                         SettingsPage.API -> ApiPage(
@@ -1355,7 +1379,22 @@ private fun DataPage(
     onExportCrash: () -> Unit,
     onImport: () -> Unit,
     onDeleteAll: () -> Unit,
+    personaFileName: String = "",
+    onPickPersona: () -> Unit = {},
 ) {
+    SettingsSectionLabel("角色档案")
+    SettingsCard {
+        SettingsActionRow(
+            label = "角色档案文件",
+            hint = if (personaFileName.isBlank()) {
+                "未绑定：点这里选一个 .md 或 .txt，每轮读取并追加对话原文"
+            } else {
+                personaFileName
+            },
+            onClick = onPickPersona,
+        )
+    }
+
     SettingsSectionLabel(stringResource(R.string.settings_group_backup))
 
     SettingsCard {

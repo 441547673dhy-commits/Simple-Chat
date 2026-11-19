@@ -1,6 +1,7 @@
 package com.simplechat.app.data
 
 import android.content.Context
+import android.net.Uri
 import com.simplechat.app.net.ApiStyle
 import com.simplechat.app.net.ProviderKind
 import androidx.datastore.core.DataStore
@@ -15,6 +16,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 
@@ -139,6 +142,12 @@ data class StoredSettings(
      */
     val modelIds: List<String> = emptyList(),
 
+    /**
+     * 角色档案文件（SAF URI）。每轮发送前读取它的内容拼进系统提示词，
+     * 回复完成后把本轮问答原文追加回去。空串 = 未启用。
+     */
+    val personaFileUri: String = "",
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -205,8 +214,43 @@ class SettingsStore(
             ttsVoiceName = prefs[Keys.TTS_VOICE] ?: StoredSettings().ttsVoiceName,
             ttsVoiceLabel = prefs[Keys.TTS_VOICE_LABEL] ?: StoredSettings().ttsVoiceLabel,
             modelIds = ModelIdList.decode(prefs[Keys.MODEL_IDS]),
+            personaFileUri = prefs[Keys.PERSONA_FILE].orEmpty(),
 
         )
+    }
+
+    /** 绑定角色档案文件（SAF URI）。传空串解除绑定。 */
+    suspend fun setPersonaFileUri(uri: String) {
+        preferences.edit { it[Keys.PERSONA_FILE] = uri }
+    }
+
+    /** 读取角色档案全文；未绑定或读失败返回空串。 */
+    suspend fun readPersonaFile(): String {
+        val uri = flow.first().personaFileUri
+        if (uri.isBlank()) return ""
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                    input.readBytes().toString(Charsets.UTF_8)
+                }
+            }.getOrNull().orEmpty()
+        }
+    }
+
+    /** 把本轮问答原文追加到角色档案文件末尾。 */
+    suspend fun appendPersonaFile(text: String) {
+        val uri = flow.first().personaFileUri
+        if (uri.isBlank() || text.isBlank()) return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val existing = context.contentResolver.openInputStream(Uri.parse(uri))?.use {
+                    it.readBytes().toString(Charsets.UTF_8)
+                }.orEmpty()
+                context.contentResolver.openOutputStream(Uri.parse(uri), "wt")?.use { out ->
+                    out.write((existing + "\n\n" + text).toByteArray(Charsets.UTF_8))
+                }
+            }
+        }
     }
 
     suspend fun setProvider(providerId: String, baseUrl: String, modelId: String) {
@@ -538,6 +582,7 @@ class SettingsStore(
 
         /** 当前端点 `/models` 拉回来的 id，换行分隔（[ModelIdList]）。 */
         val MODEL_IDS = stringPreferencesKey("model_ids")
+        val PERSONA_FILE = stringPreferencesKey("persona_file")
 
     }
 }

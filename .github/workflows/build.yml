@@ -25,9 +25,6 @@ jobs:
           mkdir -p $ANDROID_USER_HOME
           keytool -genkey -keystore $ANDROID_USER_HOME/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug"
       - run: |
-          F=app/src/main/java/com/simplechat/app/net/Provider.kt
-          sed -i -e '/displayName = "DeepSeek V4.1 Flash"/,/contextWindow/ s/1_000_000/131_072/' -e '/displayName = "DeepSeek V4 Pro"/,/contextWindow/ s/1_000_000/131_072/' $F
-      - run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon > /tmp/b.log 2>&1 || {
             grep -A8 'What went wrong' /tmp/b.log | head -12
