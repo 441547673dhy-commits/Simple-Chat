@@ -265,13 +265,14 @@ class SettingsStore(
 
     /** 读取注入文件全文；未绑定或读失败返回空串。会话级优先，取不到回落全局。 */
     suspend fun readPersonaFile(conversationId: String? = null): String {
-        val prefs = flow.first()
+        val stored = flow.first()
         val uri = if (conversationId.isNullOrBlank()) {
-            prefs.personaFileUri
+            stored.personaFileUri
         } else {
-            prefs[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
+            // 动态键不在 StoredSettings 里，得直接问 DataStore 要
+            preferences.data.first()[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
                 .orEmpty()
-                .ifBlank { prefs.personaFileUri }
+                .ifBlank { stored.personaFileUri }
         }
         if (uri.isBlank()) return ""
         return withContext(Dispatchers.IO) {
@@ -290,18 +291,18 @@ class SettingsStore(
 
     /** 取这个会话实际生效的注入文件 URI（会话级优先，回落全局）。 */
     suspend fun personaFileUriFor(conversationId: String?): String {
-        val prefs = flow.first()
-        if (conversationId.isNullOrBlank()) return prefs.personaFileUri
-        return prefs[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
-            .orEmpty().ifBlank { prefs.personaFileUri }
+        val stored = flow.first()
+        if (conversationId.isNullOrBlank()) return stored.personaFileUri
+        return preferences.data.first()[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
+            .orEmpty().ifBlank { stored.personaFileUri }
     }
 
     /** 取这个会话实际生效的日志 URI。 */
     suspend fun personaLogUriFor(conversationId: String?): String {
-        val prefs = flow.first()
-        if (conversationId.isNullOrBlank()) return prefs.personaLogUri
-        return prefs[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
-            .orEmpty().ifBlank { prefs.personaLogUri }
+        val stored = flow.first()
+        if (conversationId.isNullOrBlank()) return stored.personaLogUri
+        return preferences.data.first()[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
+            .orEmpty().ifBlank { stored.personaLogUri }
     }
 
     /** 是否只发送最近一段历史。 */
@@ -316,13 +317,13 @@ class SettingsStore(
      * 把这一轮的输出变成下一轮的前置条件，跨会话互相污染（见 [StoredSettings.personaFileUri]）。
      */
     suspend fun appendPersonaLog(text: String, conversationId: String? = null) {
-        val prefs = flow.first()
+        val stored = flow.first()
         val uri = if (conversationId.isNullOrBlank()) {
-            prefs.personaLogUri
+            stored.personaLogUri
         } else {
-            prefs[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
+            preferences.data.first()[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
                 .orEmpty()
-                .ifBlank { prefs.personaLogUri }
+                .ifBlank { stored.personaLogUri }
         }
         if (uri.isBlank() || text.isBlank()) return
         withContext(Dispatchers.IO) {
