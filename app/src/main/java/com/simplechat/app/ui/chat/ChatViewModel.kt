@@ -1061,7 +1061,11 @@ class ChatViewModel(
 
         // —— 实际会发给 API 的部分 ——
         val system = settings.composedSystemPrompt(presets)
-        val outgoing = orderedOutgoingMessages(messages, active)
+        // 与真正发出去的内容保持一致：开了「只发送最近内容」就按同样的预算裁剪，
+        // 否则圆环显示 668k、实际只发 30k，看起来像"她又满了"（会误导判断）
+        val outgoing = orderedOutgoingMessages(messages, active).let { list ->
+            if (stored.recentOnly) trimToRecentBudget(list, RECENT_BUDGET_CHARS) else list
+        }
         val inContext = buildList {
             if (system.isNotBlank()) add(system)
             if (active != null && active.summary.isNotBlank()) add(active.summary)
