@@ -23,7 +23,13 @@ jobs:
           sudo ln -sfn /opt/android-sdk/platforms/android-37.0 /opt/android-sdk/platforms/android-37
       - run: |
           mkdir -p $ANDROID_USER_HOME
-          keytool -genkey -keystore $ANDROID_USER_HOME/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug"
+          # 固定签名：每次构建用同一个密钥，否则每个包都是"新应用"，覆盖安装必然签名冲突
+          echo "$KEYSTORE_B64" | base64 -d > $ANDROID_USER_HOME/debug.keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+      - run: |
+          echo "keystore 指纹："
+          keytool -list -keystore $ANDROID_USER_HOME/debug.keystore -storepass android | grep -i SHA
       - run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon > /tmp/b.log 2>&1 || {
