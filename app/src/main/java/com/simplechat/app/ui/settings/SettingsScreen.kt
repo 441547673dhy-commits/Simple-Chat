@@ -256,8 +256,16 @@ fun SettingsScreen(
     LaunchedEffect(conversationId) {
         personaUri = store.personaFileUriFor(conversationId)
         personaLogUri = store.personaLogUriFor(conversationId)
-        personaFileName = personaUri.substringAfterLast('/').ifBlank { "未绑定" }
-        personaLogName = personaLogUri.substringAfterLast('/').ifBlank { "未绑定" }
+        // 标出"继承全局"：会话没有自己的绑定时会回落到全局那份，
+        // 以前看不出来，导致在 A 会话改了绑定却影响了 B（排查了很久）
+        val globalInject = store.personaFileUriFor(null)
+        val globalLog = store.personaLogUriFor(null)
+        val inheritInject = conversationId != null && personaUri == globalInject
+        val inheritLog = conversationId != null && personaLogUri == globalLog
+        personaFileName = personaDisplayName(personaUri) +
+            if (inheritInject) "（继承全局）" else ""
+        personaLogName = personaDisplayName(personaLogUri) +
+            if (inheritLog) "（继承全局）" else ""
     }
     val personaPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -624,13 +632,13 @@ fun SettingsScreen(
                             },
                             onDeleteAll = { dialog = SettingsDialog.DeleteAll },
                             personaFileName = personaFileName.ifBlank {
-                                personaUri.substringAfterLast('/').ifBlank { "未绑定" }
+                                personaDisplayName(personaUri)
                             },
                             onPickPersona = {
                                 personaPicker.launch(arrayOf("text/*", "application/octet-stream"))
                             },
                             personaLogName = personaLogName.ifBlank {
-                                personaLogUri.substringAfterLast('/').ifBlank { "未绑定" }
+                                personaDisplayName(personaLogUri)
                             },
                             onPickLog = {
                                 logPicker.launch(arrayOf("text/*", "application/octet-stream"))
@@ -2947,5 +2955,16 @@ private fun maskKey(key: String): String {
     return key.take(4) + "••••" + key.takeLast(4)
 }
 
-
-
+/**
+ * SAF URI 转成给人看的文件名。
+ *
+ * `content://.../document/primary%3A%E8%82%A5...` 直接取最后一段会得到一串百分号编码，
+ * 手机上根本认不出是哪个文件 —— 之前排查"某个会话到底绑的哪份"就卡在这。
+ */
+internal fun personaDisplayName(uri: String): String {
+    if (uri.isBlank()) return "未绑定"
+    val tail = uri.substringAfterLast('/')
+    val decoded = runCatching { android.net.Uri.decode(tail) }.getOrDefault(tail)
+    // primary:肥鱼/记忆/6号-上下文.md → 只留最后的文件名，前缀在提示里说
+    return decoded.substringAfterLast('/').ifBlank { decoded }
+}
