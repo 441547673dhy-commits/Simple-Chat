@@ -272,7 +272,13 @@ class SettingsStore(
         if (conversationId.isNullOrBlank()) global
         else stringPreferencesKey(prefix + "_" + conversationId)
 
-    /** 读取注入文件全文；未绑定或读失败返回空串。会话级优先，取不到回落全局。 */
+    /**
+     * 读取注入文件全文；未绑定或读失败返回空串。
+     *
+     * **不回落到全局**：早先是"会话级空的就用全局"，结果是没绑过的会话悄悄读到
+     * 6 号 的档案（人还在，但记忆串了），而且界面上看不出来 —— 比"没绑"危险得多。
+     * 现在没绑就是没绑，宁可空着。
+     */
     suspend fun readPersonaFile(conversationId: String? = null): String {
         val stored = flow.first()
         val uri = if (conversationId.isNullOrBlank()) {
@@ -281,7 +287,6 @@ class SettingsStore(
             // 动态键不在 StoredSettings 里，得直接问 DataStore 要
             preferences.data.first()[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
                 .orEmpty()
-                .ifBlank { stored.personaFileUri }
         }
         if (uri.isBlank()) return ""
         return withContext(Dispatchers.IO) {
@@ -298,20 +303,18 @@ class SettingsStore(
         preferences.edit { it[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")] = uri }
     }
 
-    /** 取这个会话实际生效的注入文件 URI（会话级优先，回落全局）。 */
+    /** 取这个会话实际生效的注入文件 URI（**不再回落全局**，没绑就是空串）。 */
     suspend fun personaFileUriFor(conversationId: String?): String {
-        val stored = flow.first()
-        if (conversationId.isNullOrBlank()) return stored.personaFileUri
+        if (conversationId.isNullOrBlank()) return flow.first().personaFileUri
         return preferences.data.first()[personaKey(conversationId, Keys.PERSONA_FILE, "persona_file")]
-            .orEmpty().ifBlank { stored.personaFileUri }
+            .orEmpty()
     }
 
-    /** 取这个会话实际生效的日志 URI。 */
+    /** 取这个会话实际生效的日志 URI（**不再回落全局**）。 */
     suspend fun personaLogUriFor(conversationId: String?): String {
-        val stored = flow.first()
-        if (conversationId.isNullOrBlank()) return stored.personaLogUri
+        if (conversationId.isNullOrBlank()) return flow.first().personaLogUri
         return preferences.data.first()[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
-            .orEmpty().ifBlank { stored.personaLogUri }
+            .orEmpty()
     }
 
     /** 是否只发送最近一段历史。 */
@@ -337,7 +340,6 @@ class SettingsStore(
         } else {
             preferences.data.first()[personaKey(conversationId, Keys.PERSONA_LOG, "persona_log")]
                 .orEmpty()
-                .ifBlank { stored.personaLogUri }
         }
         if (uri.isBlank() || text.isBlank()) return
         withContext(Dispatchers.IO) {
