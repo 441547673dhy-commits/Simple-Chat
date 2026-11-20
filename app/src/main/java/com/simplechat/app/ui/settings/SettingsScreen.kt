@@ -1472,7 +1472,7 @@ private fun DataPage(
         )
         SettingsActionRow(
             label = "发送预算",
-            hint = (if (recentBudgetChars <= 0) "不限（发全部历史）"
+            hint = (if (recentBudgetChars <= 0) "不限（发到窗口上限 ≈83 万 token）"
                     else "${recentBudgetChars / 10_000} 万字符") +
                 " · 点按切换（越大记得越远、越贵越慢）",
             onClick = onCycleBudget,
