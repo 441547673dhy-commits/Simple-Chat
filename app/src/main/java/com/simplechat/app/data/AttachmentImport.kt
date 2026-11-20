@@ -95,6 +95,7 @@ object AttachmentImport {
                 } catch (e: java.io.IOException) {
                     // 读图失败的异常都会落到 IOException 上，而它被网络层统一映射成
                     // "连接被中断" —— 本地问题被说成网络问题，排查时误导了好几轮。
+                    logImportFailure(context, uri, e)
                     throw AppTextException(R.string.err_image_read)
                 }
             }
@@ -135,6 +136,28 @@ object AttachmentImport {
      * API 26–27 回落到 `BitmapFactory`，方向要自己读 EXIF 补。
      */
     @Suppress("DEPRECATION")
+
+    /**
+     * 把读图失败的现场写到 App 外部目录（`/sdcard/Android/data/<pkg>/files/diag/`）。
+     *
+     * 只写异常类名、消息、URI、MIME —— **不写图片内容、不写对话**。
+     * 排查"本地图片读不了"时，没有这个就只能猜。
+     */
+    private fun logImportFailure(context: Context, uri: Uri, error: Throwable) {
+        runCatching {
+            val dir = File(context.getExternalFilesDir(null), "diag").apply { mkdirs() }
+            val line = buildString {
+                append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                    .format(java.util.Date()))
+                append(" uri=").append(uri)
+                append(" mime=").append(runCatching { context.contentResolver.getType(uri) }.getOrNull())
+                append(" scheme=").append(uri.scheme)
+                append(" err=").append(error.javaClass.name).append(": ").append(error.message)
+            }
+            File(dir, "image-import.log").appendText(line + "\n")
+        }
+    }
+
     /** 把 URI 的字节拷进缓存文件（可 seek），并做大小上限检查。 */
     private fun stage(context: Context, uri: Uri): File {
         val dir = File(context.cacheDir, "attach").apply { mkdirs() }
