@@ -1381,6 +1381,35 @@ class ChatViewModel(
         }
     }
 
+
+    /**
+     * 是否已经陷入**病态复读**（同一片段连续重复太多次）。
+     *
+     * 背景：她（2 号）的口癖「极其」在上下文里积累到几万次，模型会顺着概率一直复读，
+     * 直到被服务端截断——2026-11-20 真机上出现过整段"极其极其极其…"。
+     * 这不是卡死，是生成退化；请求里也没有任何防重复参数。
+     *
+     * 这里只掐"连成一串"的病态情形（同一片段 ≥12 连），
+     * **不影响她正常用几次口癖**。
+     */
+    private fun isDegenerateRepeat(text: String): Boolean {
+        val tail = text.takeLast(400)
+        if (tail.length < 24) return false
+        for (unit in 1..8) {
+            if (tail.length < unit * 12) continue
+            val unitText = tail.substring(tail.length - unit)
+            if (unitText.isBlank()) continue
+            var count = 0
+            var end = tail.length
+            while (end - unit >= 0 && tail.regionMatches(end - unit, unitText, 0, unit)) {
+                count++
+                end -= unit
+                if (count >= 12) return true
+            }
+        }
+        return false
+    }
+
     fun stop() {
         if (!isStreaming) return
         stoppedByUser = true
@@ -1525,6 +1554,18 @@ class ChatViewModel(
                     }
                     if (accumulator != null) { reasoningText = accumulator.thinking; contentText = accumulator.answer }
                     dirty = false
+
+                    // 病态复读：当场掐断，别让她把整段输出耗成一串重复词
+                    if (accumulator != null && isDegenerateRepeat(accumulator.answer)) {
+                        patch(replyId) {
+                            it.copy(
+                                status = MessageStatus.ERROR,
+                                errorMessage = Res.get(R.string.error_degenerate_repeat),
+                            )
+                        }
+                        stop()
+                        return@launch
+                    }
 
                     // §4.4：流中每约 1.5s 落一次盘，崩溃不丢内容
                     val now = System.currentTimeMillis()

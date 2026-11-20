@@ -266,6 +266,7 @@
     <string name="msg_delete_title">删除这条消息？</string>
     <string name="msg_delete_body">只删除这一条的内容，位置会留一个标记（她能看到这里断过）。</string>
     <string name="msg_deleted_placeholder">（此处删掉了一条消息）</string>
+    <string name="error_degenerate_repeat">检测到重复循环，已自动中止。点「重试」再说一次。</string>
 
     <!-- ── 附件 ─────────────────────────────────────────── -->
     <string name="attach_read_failed">附件读取失败</string>
