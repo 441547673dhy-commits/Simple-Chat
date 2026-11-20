@@ -1777,6 +1777,10 @@ class ChatViewModel(
                 append(Res.get(R.string.prompt_recap_intro))
                 append(active.summary)
             }
+            // 当前时间放在**末尾**：它是每轮唯一变化的一行，放前面会让整段前缀的
+            // 缓存失效（前缀缓存按最长公共前缀算，第一个 token 不同就全不命中）。
+            if (isNotEmpty()) appendLine().appendLine()
+            append(currentTimeLine())
         }
         val requestTitle = shouldRequestTitle()
         if (requestTitle) serverTitleRequestedFor = currentConversationId
@@ -1830,6 +1834,24 @@ class ChatViewModel(
         ).also { request ->
             if (request.messages.none { it.role == "user" }) throw com.simplechat.app.data.AppTextException(R.string.error_no_sendable_messages)
         }
+    }
+
+
+    /**
+     * 「当前时间」那一行。
+     *
+     * 每轮现算：缓存住就会跨日说谎（同 [latestReminder] 的理由）。
+     * 官方通道的 reminder 只带日期、不带钟点，所以她只能猜时段 —— 这行补上钟点。
+     */
+    private fun currentTimeLine(): String {
+        val now = java.time.LocalDateTime.now()
+        val date = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val clock = now.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+        val week = now.dayOfWeek.getDisplayName(
+            java.time.format.TextStyle.FULL,
+            java.util.Locale.SIMPLIFIED_CHINESE,
+        )
+        return "当前时间：$date $clock（$week）"
     }
 
     /**
@@ -2014,6 +2036,8 @@ class ChatViewModel(
                 appendLine().appendLine()
             }
             append(settings.composedSystemPrompt(presets))
+            if (isNotEmpty()) appendLine().appendLine()
+            append(currentTimeLine())
         }
         if (system.isNotBlank()) {
             request += OutMessageDto(role = "system", content = MessageContent.text(system))
