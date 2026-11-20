@@ -562,30 +562,16 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         messages.resolveDanglingStreams(conversationId, MessageStatus.STOPPED.toStorage())
 
     /**
-     * 删除**一条**消息，并把它的孩子接到它父亲上。
+     * 删除消息：**软删除**，留在链上，只把内容换成占位标记。
      *
-     * 早先是"删整棵子树"：删一句污染源，后面全部历史一起没 —— 那样根本没法用。
-     * 现在只摘掉这一环，链条自动接上（见 `reparentChildren`）。
-     *
-     * 仍然保证的那条不变式：**同一个父亲下恰好一条 active**。摘掉中间一节后，
-     * 优先让原本的 active 孩子顶上；没有就用最后一个同层消息。
+     * 早先是删整棵子树 —— 删一句污染源，后面全部历史跟着没。
+     * 中间那版改成"重挂父节点"，但那会让后面的内容直接接到前一节上，
+     * 模型会以为两句话本来就是连着的（他指出的问题）。
+     * 现在只换内容：链不断，她知道这里缺了一句。
      */
     suspend fun deleteMessage(messageId: String) {
         val node = messages.exportHeader(messageId) ?: return
-        val all = loadMessagesSafely(node.conversationId)
-        val activeChild = all.firstOrNull { it.parentId == messageId && it.active }
-
-        messages.reparentChildren(messageId, node.parentId)
-        messages.deleteByIds(listOf(messageId))
-
-        val remaining = loadMessagesSafely(node.conversationId)
-        val siblings = remaining.filter { it.parentId == node.parentId }
-        if (siblings.isNotEmpty() && siblings.none { it.active }) {
-            val promoted = activeChild?.let { child -> siblings.firstOrNull { it.id == child.id } }
-            (promoted ?: MessageTree.lastSibling(remaining, node.parentId))?.let {
-                messages.activate(it.id, node.conversationId, node.parentId)
-            }
-        }
+        messages.softDelete(messageId, Res.get(R.string.msg_deleted_placeholder))
     }
 
     /** 切到某个版本。同一个父亲下只有它会 `active = 1`。 */

@@ -407,13 +407,21 @@ interface MessageDao {
     suspend fun deleteByIds(ids: List<String>)
 
     /**
-     * 把 [oldParent] 下的子消息接到 [newParent] 上。
+     * 软删除：**留在链上**，只把内容换成占位标记。
      *
-     * 单条删除要用的那一步：删掉中间某条时，它后面的消息不能跟着陪葬，
-     * 而是"上一层"接上去（消息是树，链断了就整段消失，这曾是删一条毁半段的根源）。
+     * 为什么不真删：消息是树，抽掉中间一节，后面的内容会直接接到前一节上，
+     * 模型看到的就是"两句话本来就是连着的" —— 那是凭空捏造的连续。
+     * 留一个占位，她知道这里断过、断在哪。
      */
-    @Query("UPDATE messages SET parentId = :newParent WHERE parentId = :oldParent")
-    suspend fun reparentChildren(oldParent: String, newParent: String?)
+    @Query(
+        """
+        UPDATE messages
+        SET content = :placeholder, attachments = '[]', reasoning = NULL,
+            timeline = NULL, reasoningSeconds = NULL, errorMessage = NULL
+        WHERE id = :id
+        """,
+    )
+    suspend fun softDelete(id: String, placeholder: String)
 
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId")
     suspend fun countFor(conversationId: String): Int
