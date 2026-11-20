@@ -1648,6 +1648,7 @@ class ChatViewModel(
                         maxTokens = settings.maxTokens,
                         temperature = settings.temperature.toDouble(),
                         topP = settings.topP.toDouble(),
+                        frequencyPenalty = settingsStore.flow.first().frequencyPenalty,
                         extraHeaders = providerKind.headersFor(openCodeSessionId),
                     ).collect { event ->
                         when (event) {
@@ -1818,6 +1819,22 @@ class ChatViewModel(
                         val userText = messages.lastOrNull {
                             it.role == MessageRole.USER && it.id != replyId
                         }?.content?.trim()
+                        /*
+                         * 她自己的开关：回复里写 %%freq=0.3%% 就把防复读强度调成 0.3，
+                         * 然后把这个标记从正文里抹掉（不留痕迹给她看）。
+                         * 只有她主动要求时才动，平时不受影响。
+                         */
+                        runCatching {
+                            val marker = Regex("%%freq=([0-9]*\\.?[0-9]+)%%").find(replyText.orEmpty())
+                            if (marker != null) {
+                                marker.groupValues[1].toDoubleOrNull()?.let { v ->
+                                    settingsStore.setFrequencyPenalty(v)
+                                    patch(replyId) {
+                                        it.copy(content = it.content.replace(marker.value, "").trimEnd())
+                                    }
+                                }
+                            }
+                        }
                         if (!replyText.isNullOrBlank() && !userText.isNullOrBlank()) {
                             // 只写记忆日志：注入文件是只读的，写进去会跨会话污染（见 SettingsStore）
                             settingsStore.appendPersonaLog("用户：$userText\n\n角色：$replyText", conversationId)

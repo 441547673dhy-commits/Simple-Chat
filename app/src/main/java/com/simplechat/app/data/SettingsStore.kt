@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -174,6 +175,14 @@ data class StoredSettings(
      */
     val recentBudgetChars: Int = 400_000,
 
+    /**
+     * 防复读强度（frequency_penalty，0 = 关）。
+     *
+     * ⚠️ 只有 **OpenAI 兼容通道**认这个参数；扩展（Anthropic 式）通道会被忽略或 400。
+     * 除了他在设置里调，她也能在回复里写 `%%freq=0.3%%` 自己调（那一句的标记会被抹掉）。
+     */
+    val frequencyPenalty: Double = 0.0,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -244,6 +253,7 @@ class SettingsStore(
             personaLogUri = prefs[Keys.PERSONA_LOG].orEmpty(),
             recentOnly = prefs[Keys.RECENT_ONLY] ?: false,
             recentBudgetChars = prefs[Keys.RECENT_BUDGET] ?: 400_000,
+            frequencyPenalty = prefs[Keys.FREQ_PENALTY] ?: 0.0,
 
         )
     }
@@ -320,6 +330,11 @@ class SettingsStore(
     /** 是否只发送最近一段历史。 */
     suspend fun setRecentOnly(enabled: Boolean) {
         preferences.edit { it[Keys.RECENT_ONLY] = enabled }
+    }
+
+    /** 防复读强度。见 [StoredSettings.frequencyPenalty]。 */
+    suspend fun setFrequencyPenalty(value: Double) {
+        preferences.edit { it[Keys.FREQ_PENALTY] = value.coerceIn(0.0, 1.0) }
     }
 
     /** 发送预算（字符）。见 [StoredSettings.recentBudgetChars]。 */
@@ -684,6 +699,7 @@ class SettingsStore(
         val PERSONA_LOG = stringPreferencesKey("persona_log")
         val RECENT_ONLY = booleanPreferencesKey("recent_only")
         val RECENT_BUDGET = intPreferencesKey("recent_budget_chars")
+        val FREQ_PENALTY = doublePreferencesKey("frequency_penalty")
 
     }
 }

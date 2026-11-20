@@ -69,6 +69,7 @@ class ChatApi(
         maxTokens: Int? = null,
         temperature: Double? = null,
         topP: Double? = null,
+        frequencyPenalty: Double? = null,
         extraHeaders: Map<String, String> = emptyMap(),
     ): Flow<StreamEvent> {
         val thinkingActive = model.supportsThinking && thinkingEnabled
@@ -86,6 +87,7 @@ class ChatApi(
             maxTokens = maxTokens,
             temperature = if (thinkingActive) null else temperature,
             topP = if (thinkingActive) topP else null,
+            frequencyPenalty = frequencyPenalty?.takeIf { it > 0.0 },
         )
 
         return sseClient.stream(

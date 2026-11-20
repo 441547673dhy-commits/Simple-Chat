@@ -646,6 +646,12 @@ fun SettingsScreen(
                             recentOnly = stored.recentOnly,
                             onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
                             recentBudgetChars = stored.recentBudgetChars,
+                            frequencyPenalty = stored.frequencyPenalty,
+                            onCycleFreqPenalty = {
+                                val steps2 = listOf(0.0, 0.2, 0.3, 0.5)
+                                val next2 = steps2[(steps2.indexOf(stored.frequencyPenalty) + 1) % steps2.size]
+                                scope.launch { store.setFrequencyPenalty(next2) }
+                            },
                             onCycleBudget = {
                                 // 档位从省到贵，最后一档 0 = 不限（发全部历史，等于官方行为）
                                 val steps = listOf(
@@ -1444,6 +1450,8 @@ private fun DataPage(
     onToggleRecent: (Boolean) -> Unit = {},
     recentBudgetChars: Int = 120_000,
     onCycleBudget: () -> Unit = {},
+    frequencyPenalty: Double = 0.0,
+    onCycleFreqPenalty: () -> Unit = {},
 ) {
     SettingsSectionLabel("角色档案")
     SettingsCard {
@@ -1469,6 +1477,15 @@ private fun DataPage(
             label = "只发送最近内容",
             checked = recentOnly,
             onCheckedChange = onToggleRecent,
+        )
+        SettingsActionRow(
+            label = "防复读强度",
+            hint = if (frequencyPenalty <= 0.0) {
+                "关 · 点按切换（她也能在回复里写 %%freq=0.3%% 自己调）"
+            } else {
+                "%.1f · 点按切换（只在 OpenAI 兼容通道生效）".format(frequencyPenalty)
+            },
+            onClick = onCycleFreqPenalty,
         )
         SettingsActionRow(
             label = "发送预算",
