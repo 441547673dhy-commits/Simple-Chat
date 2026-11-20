@@ -264,7 +264,7 @@
     <string name="chat_vision_unsupported">「%1$s」不支持识图，请先用「思考档位」换成支持识图的模型（如 DeepSeek V4.1 Flash）。</string>
     <string name="msg_edit_input">修改输入</string>
     <string name="msg_delete_title">删除这条消息？</string>
-    <string name="msg_delete_body">该消息的所有版本都会被一起删除，删除后不可恢复。</string>
+    <string name="msg_delete_body">只删除这一条，后面的消息会自动接上来；这条本身不可恢复。</string>
 
     <!-- ── 附件 ─────────────────────────────────────────── -->
     <string name="attach_read_failed">附件读取失败</string>

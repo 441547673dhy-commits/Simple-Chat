@@ -562,21 +562,27 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         messages.resolveDanglingStreams(conversationId, MessageStatus.STOPPED.toStorage())
 
     /**
-     * 删除一条消息 —— **连同它的整棵子树**。
+     * 删除**一条**消息，并把它的孩子接到它父亲上。
      *
-     * 下游都是基于它生成的，留着一个"没有前文的下文"没有意义。
-     * 删完若父节点下再没有 active 的兄弟，让最后一个兄弟接管，
-     * 免得路径断在半途、后面全部不显示。
+     * 早先是"删整棵子树"：删一句污染源，后面全部历史一起没 —— 那样根本没法用。
+     * 现在只摘掉这一环，链条自动接上（见 `reparentChildren`）。
+     *
+     * 仍然保证的那条不变式：**同一个父亲下恰好一条 active**。摘掉中间一节后，
+     * 优先让原本的 active 孩子顶上；没有就用最后一个同层消息。
      */
     suspend fun deleteMessage(messageId: String) {
         val node = messages.exportHeader(messageId) ?: return
         val all = loadMessagesSafely(node.conversationId)
-        messages.deleteByIds(MessageTree.subtreeIds(all, messageId))
+        val activeChild = all.firstOrNull { it.parentId == messageId && it.active }
+
+        messages.reparentChildren(messageId, node.parentId)
+        messages.deleteByIds(listOf(messageId))
 
         val remaining = loadMessagesSafely(node.conversationId)
         val siblings = remaining.filter { it.parentId == node.parentId }
         if (siblings.isNotEmpty() && siblings.none { it.active }) {
-            MessageTree.lastSibling(remaining, node.parentId)?.let {
+            val promoted = activeChild?.let { child -> siblings.firstOrNull { it.id == child.id } }
+            (promoted ?: MessageTree.lastSibling(remaining, node.parentId))?.let {
                 messages.activate(it.id, node.conversationId, node.parentId)
             }
         }

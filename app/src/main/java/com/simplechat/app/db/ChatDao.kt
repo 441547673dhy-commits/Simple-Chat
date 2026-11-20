@@ -406,6 +406,15 @@ interface MessageDao {
     @Query("DELETE FROM messages WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
 
+    /**
+     * 把 [oldParent] 下的子消息接到 [newParent] 上。
+     *
+     * 单条删除要用的那一步：删掉中间某条时，它后面的消息不能跟着陪葬，
+     * 而是"上一层"接上去（消息是树，链断了就整段消失，这曾是删一条毁半段的根源）。
+     */
+    @Query("UPDATE messages SET parentId = :newParent WHERE parentId = :oldParent")
+    suspend fun reparentChildren(oldParent: String, newParent: String?)
+
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId")
     suspend fun countFor(conversationId: String): Int
 
