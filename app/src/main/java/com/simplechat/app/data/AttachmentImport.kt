@@ -109,7 +109,16 @@ object AttachmentImport {
         // ImageDecoder 需要可 seek 的源，直接喂 URI 会抛 IOException。
         val staged = stage(context, uri)
         val decoded = try {
-            decodeFile(context, staged)
+            try {
+                decodeFile(context, staged)
+            } catch (e: Exception) {
+                // 记下"实际写入多少 / 声明多少"：只看异常名分不清是截断还是解码器挑食。
+                logImportFailure(
+                    context, uri, e,
+                    extra = " staged=" + staged.length() + " declared=" + declared,
+                )
+                throw e
+            }
         } finally {
             runCatching { staged.delete() }
         }
@@ -143,7 +152,12 @@ object AttachmentImport {
      * 只写异常类名、消息、URI、MIME —— **不写图片内容、不写对话**。
      * 排查"本地图片读不了"时，没有这个就只能猜。
      */
-    private fun logImportFailure(context: Context, uri: Uri, error: Throwable) {
+    private fun logImportFailure(
+        context: Context,
+        uri: Uri,
+        error: Throwable,
+        extra: String = "",
+    ) {
         runCatching {
             val line = buildString {
                 append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
@@ -152,6 +166,7 @@ object AttachmentImport {
                 append(" mime=").append(runCatching { context.contentResolver.getType(uri) }.getOrNull())
                 append(" scheme=").append(uri.scheme)
                 append(" err=").append(error.javaClass.name).append(": ").append(error.message)
+                if (extra.isNotBlank()) append(extra)
             } + "\n"
 
             // 写到「下载」目录：App 私有目录普通文件管理器与桌面端都读不到，
