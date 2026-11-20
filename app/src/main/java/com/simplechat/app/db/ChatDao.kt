@@ -417,7 +417,7 @@ interface MessageDao {
         """
         UPDATE messages
         SET content = :placeholder, attachments = '[]', reasoning = NULL,
-            timeline = NULL, reasoningSeconds = NULL, errorMessage = NULL
+            timeline = NULL, thinkingMs = NULL, errorMessage = NULL
         WHERE id = :id
         """,
     )
