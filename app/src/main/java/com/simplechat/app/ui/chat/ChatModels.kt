@@ -194,6 +194,13 @@ data class UiMessage(
     val id: String,
     val role: MessageRole,
     val content: String,
+    /**
+     * 这条消息的**真实发送时间**（Unix 毫秒，0 = 未知）。
+     *
+     * 只用于发给模型时在正文前标注 `[10:05]`：让她看得到真实时间线，
+     * 而不是靠"上一轮加几分钟"去推。界面不显示它（界面上有自己的时间尾巴）。
+     */
+    val createdAt: Long = 0L,
     /** 附件（图片 / 纯文本文件）。见 [com.simplechat.app.data.Attachment]。 */
     val attachments: List<com.simplechat.app.data.Attachment> = emptyList(),
     val reasoning: String? = null,

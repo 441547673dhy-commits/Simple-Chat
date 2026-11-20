@@ -1806,8 +1806,10 @@ class ChatViewModel(
              * `unsupported image`，而且每一轮都复现（v1.1.2 的真实事故）。
              */
             .map { message ->
-                if (message.attachments.isEmpty()) message
+                val withAttachments = if (message.attachments.isEmpty()) message
                 else message.copy(attachments = outgoingAttachments(message.attachments))
+                // 真实时间标注：让她看得到每条消息几点发的（见 timed()）
+                withAttachments.copy(content = timed(withAttachments.content, withAttachments.createdAt))
             }
 
         /*
@@ -1843,6 +1845,21 @@ class ChatViewModel(
      * 每轮现算：缓存住就会跨日说谎（同 [latestReminder] 的理由）。
      * 官方通道的 reminder 只带日期、不带钟点，所以她只能猜时段 —— 这行补上钟点。
      */
+
+    /**
+     * 给一条历史消息加**真实时间**前缀（`[10:05] 正文`）。
+     *
+     * 为什么要有：她看得到真实的"你几点说、我几点回"，就不需要靠
+     * "上一轮加几分钟"去推钟点 —— 那种推算正是时间戳写歪的来源。
+     * 没有时间的旧消息原样返回。
+     */
+    private fun timed(content: String, createdAt: Long): String {
+        if (createdAt <= 0L || content.isBlank()) return content
+        val clock = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US)
+            .format(java.util.Date(createdAt))
+        return "[" + clock + "] " + content
+    }
+
     private fun currentTimeLine(): String {
         val now = java.time.LocalDateTime.now()
         val date = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
@@ -2082,7 +2099,7 @@ class ChatViewModel(
                  * 在协议里是不合法的（会 400），而 AI 回复本来也不该带图。
                  */
                 content = if (message.role != MessageRole.USER || message.attachments.isEmpty()) {
-                    MessageContent.text(message.content)
+                    MessageContent.text(timed(message.content, message.createdAt))
                 } else {
                     userContent(outgoing.content, outgoing.attachments)
                 },
