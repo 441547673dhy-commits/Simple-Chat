@@ -1071,7 +1071,7 @@ class ChatViewModel(
         // 与真正发出去的内容保持一致：开了「只发送最近内容」就按同样的预算裁剪，
         // 否则圆环显示 668k、实际只发 30k，看起来像"她又满了"（会误导判断）
         val outgoing = orderedOutgoingMessages(messages, active).let { list ->
-            if (stored.recentOnly) {
+            if (stored.recentOnly && input.budgetChars > 0) {
                 trimToRecentBudget(list, input.budgetChars)
             } else list
         }
@@ -1802,7 +1802,9 @@ class ChatViewModel(
         // 只发最近一段：整段历史每轮重传 = 卡死 + 流量按 MB 计（见 trimToRecentBudget）
         val recentOnly = settingsStore.flow.first().recentOnly
         val path = (if (recentOnly) {
-            trimToRecentBudget(outgoingPath, stored.recentBudgetChars)
+            if (stored.recentBudgetChars > 0) {
+                trimToRecentBudget(outgoingPath, stored.recentBudgetChars)
+            } else outgoingPath
         } else {
             outgoingPath
         }).filter { it.id != prefix?.id }
@@ -2104,7 +2106,8 @@ class ChatViewModel(
         val recentOnly = settingsStore.flow.first().recentOnly
         val outgoingList = orderedOutgoingMessages(messages, active).let { list ->
             if (recentOnly) {
-                trimToRecentBudget(list, settingsStore.flow.first().recentBudgetChars)
+                val budget = settingsStore.flow.first().recentBudgetChars
+                if (budget > 0) trimToRecentBudget(list, budget) else list
             } else list
         }
         outgoingList.forEach { message ->

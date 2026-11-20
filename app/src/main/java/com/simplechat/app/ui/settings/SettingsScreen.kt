@@ -647,7 +647,11 @@ fun SettingsScreen(
                             onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
                             recentBudgetChars = stored.recentBudgetChars,
                             onCycleBudget = {
-                                val steps = listOf(60_000, 120_000, 200_000, 400_000)
+                                // 档位从省到贵，最后一档 0 = 不限（发全部历史，等于官方行为）
+                                val steps = listOf(
+                                    30_000, 60_000, 120_000, 200_000, 300_000,
+                                    400_000, 600_000, 800_000, 1_200_000, 0,
+                                )
                                 val next = steps[(steps.indexOf(stored.recentBudgetChars) + 1) % steps.size]
                                 scope.launch { store.setRecentBudgetChars(next) }
                             },
@@ -1468,7 +1472,9 @@ private fun DataPage(
         )
         SettingsActionRow(
             label = "发送预算",
-            hint = "${recentBudgetChars / 10_000} 万字符 · 点按切换（越大记得越远、越贵越慢）",
+            hint = (if (recentBudgetChars <= 0) "不限（发全部历史）"
+                    else "${recentBudgetChars / 10_000} 万字符") +
+                " · 点按切换（越大记得越远、越贵越慢）",
             onClick = onCycleBudget,
         )
     }
