@@ -2158,7 +2158,15 @@ class ChatViewModel(
          * ⚠️ 真机上若出现滚动掉帧，先量一次帧时间再回调这个值 ——
          * 而不是凭感觉改回 50（那会连"连续"一起丢掉）。
          */
-        private const val STREAM_THROTTLE_MS = 16L
+        /*
+         * 流式刷新间隔。
+         *
+         * 16ms = 每帧一刷，长回复（她动辄 800–1500 字）时每次都要重排整段文本，
+         * 实测能卡到 ANR。60ms ≈ 每秒 16 次，肉眼几乎看不出差别，
+         * 但每帧要重排的次数降到四分之一 —— 这是低风险的那一半，
+         * 根治还要看流式期间的渲染降级（待诊断）。
+         */
+        private const val STREAM_THROTTLE_MS = 60L
 
         private const val CHECKPOINT_INTERVAL_MS = 1_500L
 
