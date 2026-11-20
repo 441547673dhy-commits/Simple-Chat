@@ -1774,13 +1774,12 @@ class ChatViewModel(
         skippedNoVision = 0; skippedUnreadable = 0
         val active = validCompaction(messages, compaction)
         val system = buildString {
-            // 角色档案：原文注入，不改写、不摘要。绑定后每轮都会带上。
-            val persona = settingsStore.readPersonaFile(currentConversationId)
-            if (persona.isNotBlank()) {
-                append(persona.trim())
+            // 角色档案 + 预设：原文注入，不改写、不摘要。走唯一入口 personaAndPresets()。
+            val core = personaAndPresets()
+            if (core.isNotEmpty()) {
+                append(core)
                 appendLine().appendLine()
             }
-            append(settings.composedSystemPrompt(presets))
             if (active != null && active.summary.isNotBlank()) {
                 if (isNotEmpty()) appendLine().appendLine()
                 append(Res.get(R.string.prompt_recap_intro))
@@ -1896,6 +1895,26 @@ class ChatViewModel(
      */
     private fun cappedBudget(budgetChars: Int): Int =
         if (budgetChars > 0) budgetChars else MAX_SEND_CHARS
+
+
+    /**
+     * 「她是谁」那一段：**角色档案 + 预设**，两条通道共用这一个入口。
+     *
+     * 为什么要收口：这些内容此前在两个 builder 里各拼一遍，改一处漏一处——
+     * 真实事故：给消息加时间标注时只改了一条通道，另一条通道的回复没带时间；
+     * 时间行也是先加在一个 builder、忘了另一个。以后再加内容，只改这里。
+     *
+     * 压缩摘要与时间行的**位置**两条通道不同（OpenAI 把摘要单列一条 system，
+     * 扩展通道只能并进 system 字符串），所以不在这里拼，由调用方按自己的协议接。
+     */
+    private suspend fun personaAndPresets(): String = buildString {
+        val persona = settingsStore.readPersonaFile(currentConversationId)
+        if (persona.isNotBlank()) {
+            append(persona.trim())
+            appendLine().appendLine()
+        }
+        append(settings.composedSystemPrompt(presets))
+    }.trim()
 
     private fun currentTimeLine(): String {
         val now = java.time.LocalDateTime.now()
@@ -2084,13 +2103,11 @@ class ChatViewModel(
         val request = mutableListOf<OutMessageDto>()
 
         val system = buildString {
-            val persona = settingsStore.readPersonaFile(currentConversationId)
-            if (persona.isNotBlank()) {
-                append(persona.trim())
+            val core = personaAndPresets()
+            if (core.isNotEmpty()) {
+                append(core)
                 appendLine().appendLine()
             }
-            append(settings.composedSystemPrompt(presets))
-            if (isNotEmpty()) appendLine().appendLine()
             append(currentTimeLine())
         }
         if (system.isNotBlank()) {

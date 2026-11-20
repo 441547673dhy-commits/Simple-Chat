@@ -172,7 +172,7 @@ data class StoredSettings(
      * 给他一个旋钮：调大 = 记得更远、更贵、首字更慢；调小 = 省、快、忘得快。
      * 之前是写死的 120000（见 ChatViewModel 的默认值）。
      */
-    val recentBudgetChars: Int = 120_000,
+    val recentBudgetChars: Int = 400_000,
 
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
@@ -243,7 +243,7 @@ class SettingsStore(
             personaFileUri = prefs[Keys.PERSONA_FILE].orEmpty(),
             personaLogUri = prefs[Keys.PERSONA_LOG].orEmpty(),
             recentOnly = prefs[Keys.RECENT_ONLY] ?: false,
-            recentBudgetChars = prefs[Keys.RECENT_BUDGET] ?: 120_000,
+            recentBudgetChars = prefs[Keys.RECENT_BUDGET] ?: 400_000,
 
         )
     }
