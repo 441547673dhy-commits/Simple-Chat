@@ -31,6 +31,11 @@ jobs:
           echo "keystore 指纹："
           keytool -list -keystore $ANDROID_USER_HOME/debug.keystore -storepass android | grep -i SHA
       - run: |
+          # 每次构建给版本号，这样「关于」页能直接看出装的是哪一版
+          sed -i "s/val appVersionCode = [0-9]*/val appVersionCode = $((27 + GITHUB_RUN_NUMBER))/" app/build.gradle.kts
+          sed -i "s/val appVersionName = \"[^\"]*\"/val appVersionName = \"1.1.5+b${GITHUB_RUN_NUMBER}\"/" app/build.gradle.kts
+          grep -n "appVersion" app/build.gradle.kts | head -3
+      - run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon > /tmp/b.log 2>&1 || {
             echo "===== Kotlin 错误 ====="
