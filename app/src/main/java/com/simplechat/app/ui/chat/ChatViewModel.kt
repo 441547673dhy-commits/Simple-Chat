@@ -1808,8 +1808,25 @@ class ChatViewModel(
             .map { message ->
                 val withAttachments = if (message.attachments.isEmpty()) message
                 else message.copy(attachments = outgoingAttachments(message.attachments))
-                // 真实时间标注：让她看得到每条消息几点发的（见 timed()）
-                withAttachments.copy(content = timed(withAttachments.content, withAttachments.createdAt))
+                /*
+                 * 真实时间标注：让她看得到每条消息几点发的（见 timed()）。
+                 *
+                 * ⚠️ assistant 消息带时间线时，扩展通道是从 timeline 的文本块重建内容的，
+                 * 只改 content 不管用 —— 她的回复会没有时间标记（实测过一次：
+                 * 她能看到他的时间，看不到自己的）。所以这边两处都补。
+                 */
+                val stamped = withAttachments.copy(
+                    content = timed(withAttachments.content, withAttachments.createdAt),
+                )
+                if (stamped.role != MessageRole.USER && stamped.timeline.isNotEmpty()) {
+                    val firstText = stamped.timeline.indexOfFirst { it is ReplyBlock.Text }
+                    if (firstText >= 0) {
+                        val blocks = stamped.timeline.toMutableList()
+                        val text = blocks[firstText] as ReplyBlock.Text
+                        blocks[firstText] = text.copy(text = timed(text.text, stamped.createdAt))
+                        stamped.copy(timeline = blocks)
+                    } else stamped
+                } else stamped
             }
 
         /*
