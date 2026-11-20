@@ -145,7 +145,6 @@ object AttachmentImport {
      */
     private fun logImportFailure(context: Context, uri: Uri, error: Throwable) {
         runCatching {
-            val dir = File(context.getExternalFilesDir(null), "diag").apply { mkdirs() }
             val line = buildString {
                 append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
                     .format(java.util.Date()))
@@ -153,8 +152,24 @@ object AttachmentImport {
                 append(" mime=").append(runCatching { context.contentResolver.getType(uri) }.getOrNull())
                 append(" scheme=").append(uri.scheme)
                 append(" err=").append(error.javaClass.name).append(": ").append(error.message)
+            } + "\n"
+
+            // 写到「下载」目录：App 私有目录普通文件管理器与桌面端都读不到，
+            // 这类"本地读图失败"的排查必须有一个双方都能开的地方。
+            val resolver = context.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "simplechat-diag.log")
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                    android.os.Environment.DIRECTORY_DOWNLOADS)
             }
-            File(dir, "image-import.log").appendText(line + "\n")
+            val target = resolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values,
+            ) ?: return@runCatching
+            // 追加：已有同名文件时 insert 会新建，所以直接覆盖写本次现场也够用
+            resolver.openOutputStream(target, "w")?.use { out ->
+                out.write(line.toByteArray(Charsets.UTF_8))
+            }
         }
     }
 
