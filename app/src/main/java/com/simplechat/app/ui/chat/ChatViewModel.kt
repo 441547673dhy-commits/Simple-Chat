@@ -91,7 +91,6 @@ private const val WarmTailMaxChars = 24_000
  * 取值参照：一轮正常对话的原文在 1–2 KB，4 万 token 大约覆盖最近一百来条，
  * 足够让语气与上下文接上；再往上加，收益迅速变小、卡死风险迅速变大。
  */
-private const val RECENT_BUDGET_CHARS = 120_000
 
 class ChatViewModel(
     private val chatApi: ChatApi,
@@ -1064,7 +1063,9 @@ class ChatViewModel(
         // 与真正发出去的内容保持一致：开了「只发送最近内容」就按同样的预算裁剪，
         // 否则圆环显示 668k、实际只发 30k，看起来像"她又满了"（会误导判断）
         val outgoing = orderedOutgoingMessages(messages, active).let { list ->
-            if (stored.recentOnly) trimToRecentBudget(list, RECENT_BUDGET_CHARS) else list
+            if (stored.recentOnly) {
+                trimToRecentBudget(list, settingsStore.flow.first().recentBudgetChars)
+            } else list
         }
         val inContext = buildList {
             if (system.isNotBlank()) add(system)
@@ -1793,7 +1794,7 @@ class ChatViewModel(
         // 只发最近一段：整段历史每轮重传 = 卡死 + 流量按 MB 计（见 trimToRecentBudget）
         val recentOnly = settingsStore.flow.first().recentOnly
         val path = (if (recentOnly) {
-            trimToRecentBudget(outgoingPath, RECENT_BUDGET_CHARS)
+            trimToRecentBudget(outgoingPath, stored.recentBudgetChars)
         } else {
             outgoingPath
         }).filter { it.id != prefix?.id }
@@ -2094,7 +2095,9 @@ class ChatViewModel(
         // 顺序规则见 `orderedOutgoingMessages`（纯函数，有单测钉死）
         val recentOnly = settingsStore.flow.first().recentOnly
         val outgoingList = orderedOutgoingMessages(messages, active).let { list ->
-            if (recentOnly) trimToRecentBudget(list, RECENT_BUDGET_CHARS) else list
+            if (recentOnly) {
+                trimToRecentBudget(list, settingsStore.flow.first().recentBudgetChars)
+            } else list
         }
         outgoingList.forEach { message ->
             /*

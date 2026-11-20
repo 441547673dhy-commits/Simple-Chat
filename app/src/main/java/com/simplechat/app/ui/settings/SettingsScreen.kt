@@ -645,6 +645,12 @@ fun SettingsScreen(
                             },
                             recentOnly = stored.recentOnly,
                             onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
+                            recentBudgetChars = stored.recentBudgetChars,
+                            onCycleBudget = {
+                                val steps = listOf(60_000, 120_000, 200_000, 400_000)
+                                val next = steps[(steps.indexOf(stored.recentBudgetChars) + 1) % steps.size]
+                                scope.launch { store.setRecentBudgetChars(next) }
+                            },
                         )
 
                         SettingsPage.API -> ApiPage(
@@ -1432,6 +1438,8 @@ private fun DataPage(
     onPickLog: () -> Unit = {},
     recentOnly: Boolean = false,
     onToggleRecent: (Boolean) -> Unit = {},
+    recentBudgetChars: Int = 120_000,
+    onCycleBudget: () -> Unit = {},
 ) {
     SettingsSectionLabel("角色档案")
     SettingsCard {
@@ -1454,9 +1462,14 @@ private fun DataPage(
             onClick = onPickLog,
         )
         SettingsSwitchRow(
-            label = "只发送最近内容（约 12 万字符）",
+            label = "只发送最近内容",
             checked = recentOnly,
             onCheckedChange = onToggleRecent,
+        )
+        SettingsActionRow(
+            label = "发送预算",
+            hint = "${recentBudgetChars / 10_000} 万字符 · 点按切换（越大记得越远、越贵越慢）",
+            onClick = onCycleBudget,
         )
     }
 

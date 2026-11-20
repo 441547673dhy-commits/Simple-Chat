@@ -166,6 +166,14 @@ data class StoredSettings(
      */
     val recentOnly: Boolean = false,
 
+    /**
+     * 「只发送最近内容」时的预算（字符）。
+     *
+     * 给他一个旋钮：调大 = 记得更远、更贵、首字更慢；调小 = 省、快、忘得快。
+     * 之前是写死的 120000（见 ChatViewModel 的默认值）。
+     */
+    val recentBudgetChars: Int = 120_000,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -235,6 +243,7 @@ class SettingsStore(
             personaFileUri = prefs[Keys.PERSONA_FILE].orEmpty(),
             personaLogUri = prefs[Keys.PERSONA_LOG].orEmpty(),
             recentOnly = prefs[Keys.RECENT_ONLY] ?: false,
+            recentBudgetChars = prefs[Keys.RECENT_BUDGET] ?: 120_000,
 
         )
     }
@@ -308,6 +317,11 @@ class SettingsStore(
     /** 是否只发送最近一段历史。 */
     suspend fun setRecentOnly(enabled: Boolean) {
         preferences.edit { it[Keys.RECENT_ONLY] = enabled }
+    }
+
+    /** 发送预算（字符）。见 [StoredSettings.recentBudgetChars]。 */
+    suspend fun setRecentBudgetChars(chars: Int) {
+        preferences.edit { it[Keys.RECENT_BUDGET] = chars }
     }
 
     /**
@@ -667,6 +681,7 @@ class SettingsStore(
         val PERSONA_FILE = stringPreferencesKey("persona_file")
         val PERSONA_LOG = stringPreferencesKey("persona_log")
         val RECENT_ONLY = booleanPreferencesKey("recent_only")
+        val RECENT_BUDGET = intPreferencesKey("recent_budget_chars")
 
     }
 }
