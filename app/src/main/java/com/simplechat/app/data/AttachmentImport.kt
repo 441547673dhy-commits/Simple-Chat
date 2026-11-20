@@ -93,7 +93,15 @@ object AttachmentImport {
                 val declared = declaredSize(context, uri)
                 if (declared > IMAGE_MAX_BYTES) throw AppTextException(R.string.err_image_too_big)
 
-                val decoded = decode(context, uri)
+                // 先落成缓存文件：小米相册选择器给的 URI 背后可能是管道流，
+                // ImageDecoder 需要可 seek 的源，直接喂 URI 会抛 IOException
+                // （又会被告知成"网络中断"，误导排查）。
+                val staged = stage(context, uri)
+                try {
+                    decodeFile(context, staged)
+                } finally {
+                    runCatching { staged.delete() }
+                }
                 val flattened = flatten(decoded)
                 val bytes = ByteArrayOutputStream().use { out ->
                     flattened.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
@@ -119,6 +127,58 @@ object AttachmentImport {
      * API 26–27 回落到 `BitmapFactory`，方向要自己读 EXIF 补。
      */
     @Suppress("DEPRECATION")
+    /** 把 URI 的字节拷进缓存文件（可 seek），并做大小上限检查。 */
+    private fun stage(context: Context, uri: Uri): File {
+        val dir = File(context.cacheDir, "attach").apply { mkdirs() }
+        val file = File(dir, "src-${System.currentTimeMillis()}.bin")
+        // 读流失败要报"读不了这张图"，不能让它冒成 IOException ——
+        // 那一类会被统一映射成"连接被中断"，把本地问题说成网络问题（排查时被误导过）。
+        val input = try {
+            context.contentResolver.openInputStream(uri)
+        } catch (e: java.io.IOException) {
+            throw AppTextException(R.string.err_image_read)
+        } ?: throw AppTextException(R.string.err_image_read)
+        input.use { source ->
+            file.outputStream().use { out ->
+                val buf = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val n = source.read(buf)
+                    if (n <= 0) break
+                    total += n
+                    if (total > IMAGE_MAX_BYTES) throw AppTextException(R.string.err_image_too_big)
+                    out.write(buf, 0, n)
+                }
+            }
+        }
+        return file
+    }
+
+    /** 从**可 seek 的文件**解码。相机那条路仍走原来的 URI 版本。 */
+    private fun decodeFile(context: Context, file: File): Bitmap {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(file)
+            return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                val w = info.size.width
+                val h = info.size.height
+                val scale = IMAGE_MAX_SIDE.toFloat() / max(w, h).coerceAtLeast(1)
+                if (scale < 1f) {
+                    decoder.setTargetSize(
+                        (w * scale).toInt().coerceAtLeast(1),
+                        (h * scale).toInt().coerceAtLeast(1),
+                    )
+                }
+            }
+        }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        val sample = sampleSize(bounds.outWidth, bounds.outHeight)
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        return BitmapFactory.decodeFile(file.absolutePath, options)
+            ?: throw AppTextException(R.string.err_image_read)
+    }
+
     private fun decode(context: Context, uri: Uri): Bitmap {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val source = ImageDecoder.createSource(context.contentResolver, uri)
