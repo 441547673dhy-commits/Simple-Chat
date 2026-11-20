@@ -1052,13 +1052,48 @@ class ChatViewModel(
      * 任何一项变了都要重算）。
      */
     @Immutable
-    private data class StatsInput(
+    /**
+     * 统计的输入。
+     *
+     * ⚠️ **不是 data class**：`snapshotFlow` 每次状态变化都要比较"值有没有变"，
+     * data class 会**逐条比较 2800 条消息的字符串**——那正好在主线程上，
+     * 打字一下比一遍，大会话（2 号 旧池 2824 条）就卡死。
+     *
+     * 改成用**指纹**比较：条数 + id 哈希 + 最后一条内容的哈希 + 设置。都是 O(n) 整数运算，
+     * 不碰大字符串；内容变了指纹就会变。
+     */
+    private class StatsInput(
         val messages: List<UiMessage>,
         val settings: ConversationSettings,
         val presets: List<Preset>,
         val compaction: CompactionEntity?,
         val budgetChars: Int,
-    )
+    ) {
+        private val size = messages.size
+        private val idsHash = messages.fold(0) { acc, m -> acc * 31 + m.id.hashCode() }
+        private val lastHash = messages.lastOrNull()?.let { it.content.hashCode() * 31 + it.status.hashCode() } ?: 0
+        private val settingsPart = settings.hashCode() * 31 + presets.size
+        private val compactionPart = (compaction?.summary?.length ?: 0) * 31 + budgetChars
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is StatsInput) return false
+            return size == other.size &&
+                idsHash == other.idsHash &&
+                lastHash == other.lastHash &&
+                settingsPart == other.settingsPart &&
+                compactionPart == other.compactionPart
+        }
+
+        override fun hashCode(): Int {
+            var h = size
+            h = h * 31 + idsHash
+            h = h * 31 + lastHash
+            h = h * 31 + settingsPart
+            h = h * 31 + compactionPart
+            return h
+        }
+    }
 
     private fun computeContextStats(input: StatsInput): ContextStats {
         val messages = input.messages
