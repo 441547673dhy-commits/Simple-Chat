@@ -97,7 +97,7 @@ object AttachmentImport {
                 // ImageDecoder 需要可 seek 的源，直接喂 URI 会抛 IOException
                 // （又会被告知成"网络中断"，误导排查）。
                 val staged = stage(context, uri)
-                try {
+                val decoded = try {
                     decodeFile(context, staged)
                 } finally {
                     runCatching { staged.delete() }
