@@ -176,7 +176,9 @@ object AttachmentImport {
     /** 把 URI 的字节拷进缓存文件（可 seek），并做大小上限检查。 */
     private fun stage(context: Context, uri: Uri): File {
         val dir = File(context.cacheDir, "attach").apply { mkdirs() }
-        val file = File(dir, "src-${System.currentTimeMillis()}.bin")
+        // 毫秒级时间戳不够用：一次选两张会在同一毫秒进来，写到同一个文件上互相截断
+        // （真机现象就是 ImageDecoder 报 "Input was incomplete"）。
+        val file = File(dir, "src-${System.currentTimeMillis()}-${java.util.UUID.randomUUID()}.bin")
         // 读流失败要报"读不了这张图"，不能让它冒成 IOException ——
         // 那一类会被统一映射成"连接被中断"，把本地问题说成网络问题（排查时被误导过）。
         val input = try {
@@ -203,6 +205,15 @@ object AttachmentImport {
     /** 从**可 seek 的文件**解码。相机那条路仍走原来的 URI 版本。 */
     private fun decodeFile(context: Context, file: File): Bitmap {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // ImageDecoder 对"看似完整实则缺字节"的文件会直接抛 DecodeException；
+            // BitmapFactory 宽容一些，所以失败时回落一次，别让一张能救的图直接报错。
+            runCatching { return decodeWithImageDecoder(file) }
+        }
+        return decodeWithBitmapFactory(file)
+    }
+
+    private fun decodeWithImageDecoder(file: File): Bitmap {
+        run {
             val source = ImageDecoder.createSource(file)
             return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -217,6 +228,9 @@ object AttachmentImport {
                 }
             }
         }
+    }
+
+    private fun decodeWithBitmapFactory(file: File): Bitmap {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         val sample = sampleSize(bounds.outWidth, bounds.outHeight)
