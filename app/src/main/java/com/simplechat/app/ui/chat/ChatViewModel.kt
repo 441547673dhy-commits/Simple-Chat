@@ -369,7 +369,14 @@ class ChatViewModel(
          * 放在前面会读到还没赋值的委托（真机表现为启动即 NPE）。
          */
         viewModelScope.launch {
-            snapshotFlow { StatsInput(messages.toList(), settings, presets, compaction) }
+            snapshotFlow {
+                StatsInput(
+                    messages.toList(), settings, presets, compaction,
+                    // snapshotFlow 的块不是 suspend，不能在这里 first()；
+                    // `stored` 是已收集好的整份设置，直接读它。
+                    stored.recentBudgetChars,
+                )
+            }
                 .collectLatest { input ->
                     delay(ContextStatsDebounceMs)
                     val stats = withContext(Dispatchers.Default) { computeContextStats(input) }
@@ -1050,6 +1057,7 @@ class ChatViewModel(
         val settings: ConversationSettings,
         val presets: List<Preset>,
         val compaction: CompactionEntity?,
+        val budgetChars: Int,
     )
 
     private fun computeContextStats(input: StatsInput): ContextStats {
@@ -1064,7 +1072,7 @@ class ChatViewModel(
         // 否则圆环显示 668k、实际只发 30k，看起来像"她又满了"（会误导判断）
         val outgoing = orderedOutgoingMessages(messages, active).let { list ->
             if (stored.recentOnly) {
-                trimToRecentBudget(list, settingsStore.flow.first().recentBudgetChars)
+                trimToRecentBudget(list, input.budgetChars)
             } else list
         }
         val inContext = buildList {
