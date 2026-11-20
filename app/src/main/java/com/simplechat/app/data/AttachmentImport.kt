@@ -90,34 +90,42 @@ object AttachmentImport {
     suspend fun image(context: Context, uri: Uri): Result<Attachment> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val declared = declaredSize(context, uri)
-                if (declared > IMAGE_MAX_BYTES) throw AppTextException(R.string.err_image_too_big)
-
-                // 先落成缓存文件：小米相册选择器给的 URI 背后可能是管道流，
-                // ImageDecoder 需要可 seek 的源，直接喂 URI 会抛 IOException
-                // （又会被告知成"网络中断"，误导排查）。
-                val staged = stage(context, uri)
-                val decoded = try {
-                    decodeFile(context, staged)
-                } finally {
-                    runCatching { staged.delete() }
+                try {
+                    readImage(context, uri)
+                } catch (e: java.io.IOException) {
+                    // 读图失败的异常都会落到 IOException 上，而它被网络层统一映射成
+                    // "连接被中断" —— 本地问题被说成网络问题，排查时误导了好几轮。
+                    throw AppTextException(R.string.err_image_read)
                 }
-                val flattened = flatten(decoded)
-                val bytes = ByteArrayOutputStream().use { out ->
-                    flattened.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
-                    out.toByteArray()
-                }
-
-                Attachment(
-                    kind = Attachment.Kind.IMAGE,
-                    name = displayName(context, uri) ?: "image.jpg",
-                    mime = "image/jpeg",
-                    data = Base64.encodeToString(bytes, Base64.NO_WRAP),
-                    width = flattened.width,
-                    height = flattened.height,
-                )
             }
         }
+
+    private fun readImage(context: Context, uri: Uri): Attachment {
+        val declared = declaredSize(context, uri)
+        if (declared > IMAGE_MAX_BYTES) throw AppTextException(R.string.err_image_too_big)
+
+        // 先落成缓存文件：小米相册选择器给的 URI 背后可能是管道流，
+        // ImageDecoder 需要可 seek 的源，直接喂 URI 会抛 IOException。
+        val staged = stage(context, uri)
+        val decoded = try {
+            decodeFile(context, staged)
+        } finally {
+            runCatching { staged.delete() }
+        }
+        val flattened = flatten(decoded)
+        val bytes = ByteArrayOutputStream().use { out ->
+            flattened.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+            out.toByteArray()
+        }
+        return Attachment(
+            kind = Attachment.Kind.IMAGE,
+            name = displayName(context, uri) ?: "image.jpg",
+            mime = "image/jpeg",
+            data = Base64.encodeToString(bytes, Base64.NO_WRAP),
+            width = flattened.width,
+            height = flattened.height,
+        )
+    }
 
     /**
      * 解码并**按需缩小**。
