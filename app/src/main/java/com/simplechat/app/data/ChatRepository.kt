@@ -614,6 +614,30 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         messages.softDelete(messageId, Res.get(R.string.msg_deleted_placeholder))
     }
 
+    /**
+     * **彻底删除**：把这条和它下面的所有子孙一起从库里移除，不留占位符。
+     *
+     * 为什么连子孙一起删：对话是一条链，中间挖空会让后面的"回答"失去"问题"，
+     * 她会读到莫名其妙的上下文。要他删中间那段时，删前会提示条数。
+     *
+     * @return 删掉的条数（含自己）。
+     */
+    suspend fun deleteMessageHard(messageId: String): Int {
+        val header = messages.exportHeader(messageId) ?: return 0
+        val all = messages.getLightFor(header.conversationId)
+        // 建 child 索引，BFS 收集子树
+        val children = all.groupBy { it.parentId }
+        val doomed = mutableListOf<String>()
+        val queue = ArrayDeque<String>().apply { add(messageId) }
+        while (queue.isNotEmpty()) {
+            val id = queue.removeFirst()
+            doomed += id
+            children[id]?.forEach { queue += it.id }
+        }
+        messages.deleteByIds(doomed)
+        return doomed.size
+    }
+
     /** 切到某个版本。同一个父亲下只有它会 `active = 1`。 */
     suspend fun activateVariant(messageId: String, conversationId: String, parentId: String) =
         messages.activate(messageId, conversationId, parentId)

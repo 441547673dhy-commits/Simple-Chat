@@ -183,6 +183,11 @@ fun ChatScreen(
     var panel by remember { mutableStateOf(InputPanelState.NONE) }
     var input by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<UiMessage?>(null) }
+    // 批量删除：首点定起点，再点定终点，中间全选
+    var bulkMode by remember { mutableStateOf(false) }
+    var bulkAnchor by remember { mutableStateOf<Int?>(null) }
+    var bulkSelected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var bulkConfirm by remember { mutableStateOf(false) }
 
     /**
      * 两条编辑路径，对应两种真实需求：
@@ -1230,6 +1235,27 @@ fun ChatScreen(
                         messages = vm.messages,
                         textSelection = textSelection,
                         shareSelection = shareSelection,
+                        onBulkStart = { m ->
+                            bulkMode = true
+                            val i = vm.messages.indexOfFirst { it.id == m.id }
+                            bulkAnchor = i
+                            bulkSelected = setOf(m.id)
+                        },
+                        bulkMode = bulkMode,
+                        bulkSelected = bulkSelected,
+                        onBulkSelect = { picked ->
+                            val list = vm.messages
+                            val idx = list.indexOfFirst { it.id == picked.id }
+                            val anchor = bulkAnchor
+                            if (anchor == null || idx < 0) {
+                                bulkAnchor = idx
+                                bulkSelected = setOf(picked.id)
+                            } else {
+                                val from = minOf(anchor, idx)
+                                val to = maxOf(anchor, idx)
+                                bulkSelected = list.subList(from, to + 1).map { it.id }.toSet()
+                            }
+                        },
                         onShare = { message ->
                             textSelection.dismiss()
                             dismissInput()
@@ -1748,18 +1774,83 @@ fun ChatScreen(
 
     // ── 删除单条确认 ──────────────────────────────────────
 
+    // ── 批量删除：底部操作条 ─────────────────────────────
+    if (bulkMode) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Row(
+                modifier = Modifier
+                    .padding(bottom = 120.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("已选 ${bulkSelected.size} 条", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = {
+                    bulkMode = false; bulkAnchor = null; bulkSelected = emptySet()
+                }) { Text("取消") }
+                TextButton(onClick = { if (bulkSelected.isNotEmpty()) bulkConfirm = true }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+
+    if (bulkConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { bulkConfirm = false },
+            title = { Text("彻底删除这 ${bulkSelected.size} 条？") },
+            text = { Text("会和它们后面的对话一起移除，不留占位符。不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ids = bulkSelected.toList()
+                    bulkConfirm = false
+                    bulkMode = false
+                    bulkAnchor = null
+                    bulkSelected = emptySet()
+                    vm.deleteMessagesHard(ids)
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { bulkConfirm = false }) { Text("取消") } },
+        )
+    }
+
     deleteTarget?.let { target ->
-        AppConfirmDialog(
-            title = stringResource(R.string.msg_delete_title),
-            message = stringResource(R.string.msg_delete_body),
-            confirmText = stringResource(R.string.action_delete),
-            destructive = true,
-            onDismiss = { deleteTarget = null },
-            onConfirm = {
-                deleteTarget = null
-                // 删除同样重建路径：顶替它的那条会落在同一个位置上，锚住它
-                anchorOnPathChange(target)
-                vm.deleteMessage(target)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.msg_delete_title)) },
+            text = {
+                Column {
+                    Text(
+                        "留占位符：清空内容，只留一个「此处删掉了一条消息」。她会知道这里断过。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "彻底删除：这条连它后面的对话一起移除，不留痕迹。\n（删中间那段会连带删掉后面的内容）",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val t0 = target
+                    deleteTarget = null
+                    anchorOnPathChange(t0)
+                    vm.deleteMessageHard(t0)
+                }) { Text("彻底删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        val t0 = target
+                        deleteTarget = null
+                        anchorOnPathChange(t0)
+                        vm.deleteMessage(t0)
+                    }) { Text("留占位符") }
+                    TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+                }
             },
         )
     }

@@ -21,6 +21,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -139,6 +141,12 @@ fun MessageList(
     onEdit: (UiMessage) -> Unit = {},
     onFork: (UiMessage) -> Unit = {},
     onDelete: (UiMessage) -> Unit = {},
+    /** 批量删除的多选模式：点消息 = 选它（首点定起点，再点定终点，中间全选）。 */
+    bulkMode: Boolean = false,
+    bulkSelected: Set<String> = emptySet(),
+    onBulkSelect: (UiMessage) -> Unit = {},
+    /** 从这条消息进入多选模式。 */
+    onBulkStart: (UiMessage) -> Unit = {},
     onVariantChange: (UiMessage, Int) -> Unit = { _, _ -> },
     onOpenImage: (UiMessage, Attachment) -> Unit = { _, _ -> },
     onRetry: (UiMessage) -> Unit = {},
@@ -256,6 +264,7 @@ fun MessageList(
             key = { _, m -> m.id },
             contentType = { _, m -> m.role },
         ) { index, message ->
+            val isBulkSelected = bulkMode && message.id in bulkSelected
             val sharedGroup = shareGroupByMessage[message.id]
             val row: @Composable () -> Unit = {
             MessageRow(
@@ -301,6 +310,7 @@ fun MessageList(
                 onEdit = { onEdit(message) },
                 onFork = { onFork(message) },
                 onDelete = { onDelete(message) },
+                onBulkStart = { onBulkStart(message) },
                 onVariantChange = { onVariantChange(message, it) },
                 onOpenImage = { onOpenImage(message, it) },
                 onRetry = { onRetry(message) },
@@ -309,6 +319,24 @@ fun MessageList(
             if (shareSelection?.active == true && sharedGroup != null) {
                 ShareSelectableRow(sharedGroup, sharedGroup.id in shareSelection.selectedIds,
                     onToggle = { shareSelection.toggle(sharedGroup) }, content = row)
+            } else if (bulkMode) {
+                // 多选：整行变成可点区域，选中的加一层淡色底 + 边框
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isBulkSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                            else androidx.compose.ui.graphics.Color.Transparent,
+                        )
+                        .border(
+                            width = if (isBulkSelected) 1.dp else 0.dp,
+                            color = if (isBulkSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .clickable { onBulkSelect(message) },
+                ) { row() }
             } else row()
         }
     }
@@ -346,6 +374,7 @@ private fun MessageRow(
     onEdit: () -> Unit,
     onFork: () -> Unit,
     onDelete: () -> Unit,
+    onBulkStart: () -> Unit = {},
     onVariantChange: (Int) -> Unit,
     onOpenImage: (Attachment) -> Unit,
     onRetry: () -> Unit,
@@ -447,6 +476,10 @@ private fun MessageRow(
             AppMenuItem(stringResource(R.string.msg_fork_from_here), AppIcons.MessageSquarePlus) {
                 menuOpen = false
                 onFork()
+            }
+            AppMenuItem("多选删除", AppIcons.ListChecks) {
+                menuOpen = false
+                onBulkStart()
             }
             // 危险操作固定分隔 —— 不随「有几个版本」这类数据变化
             AppMenuDivider()

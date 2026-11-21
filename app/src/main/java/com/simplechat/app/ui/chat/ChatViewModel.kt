@@ -1336,6 +1336,26 @@ class ChatViewModel(
     suspend fun clearDraft(key: String) = repository.clearDraft(key)
 
     /** 删除一条消息 —— 连同它的整棵子树。 */
+    /** 批量彻底删除：从列表里按 id 依次删子树，最后重载一次。 */
+    fun deleteMessagesHard(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val conversationId = currentConversationId ?: return
+        viewModelScope.launch {
+            ids.forEach { repository.deleteMessageHard(it) }
+            reloadPath(conversationId)
+        }
+    }
+
+    /** 彻底删除：连子树一起移除（不留占位符）。 */
+    fun deleteMessageHard(target: UiMessage) {
+        if (isStreaming) return
+        val conversationId = currentConversationId ?: return
+        viewModelScope.launch {
+            repository.deleteMessageHard(target.id)
+            reloadPath(conversationId)
+        }
+    }
+
     fun deleteMessage(target: UiMessage) {
         if (isStreaming) return
         val conversationId = currentConversationId ?: return
