@@ -1818,18 +1818,19 @@ fun ChatScreen(
     }
 
     deleteTarget?.let { target ->
+        val idx = vm.messages.indexOfFirst { it.id == target.id }
+        val after = if (idx >= 0) vm.messages.size - idx - 1 else 0
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.msg_delete_title)) },
             text = {
                 Column {
-                    Text(
-                        "留占位符：清空内容，只留一个「此处删掉了一条消息」。她会知道这里断过。",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Text("这条后面还有 ${after} 条对话。", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "彻底删除：这条连它后面的对话一起移除，不留痕迹。\n（删中间那段会连带删掉后面的内容）",
+                        "• 留占位符：清空内容，位置留个「此处删掉了一条消息」\n" +
+                            "• 只删这条：后面接上来，不丢东西，但可能前后不搭\n" +
+                            "• 彻底删除：这条和后面 ${after} 条一起移除，不留痕迹",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -1843,7 +1844,13 @@ fun ChatScreen(
                 }) { Text("彻底删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                Row {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = {
+                        val t0 = target
+                        deleteTarget = null
+                        anchorOnPathChange(t0)
+                        vm.deleteMessageOnly(t0)
+                    }) { Text("只删这条") }
                     TextButton(onClick = {
                         val t0 = target
                         deleteTarget = null

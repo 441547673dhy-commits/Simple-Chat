@@ -638,6 +638,22 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         return doomed.size
     }
 
+    /**
+     * **只删这一条**：不碰后面的对话，把它的子节点接到它的父亲上。
+     *
+     * 用在"删错了、不想连带后面"的场合。接口上它可能让后面的"回答"失去"问题"
+     * （上下文会短暂不连贯），但**不丢东西**——这是他明确要的取舍。
+     */
+    suspend fun deleteMessageOnly(messageId: String): Int {
+        val node = messages.exportHeader(messageId) ?: return 0
+        val all = messages.getLightFor(node.conversationId)
+        all.filter { it.parentId == messageId }.forEach { child ->
+            messages.reparent(child.id, node.parentId)
+        }
+        messages.deleteByIds(listOf(messageId))
+        return 1
+    }
+
     /** 切到某个版本。同一个父亲下只有它会 `active = 1`。 */
     suspend fun activateVariant(messageId: String, conversationId: String, parentId: String) =
         messages.activate(messageId, conversationId, parentId)
