@@ -3188,6 +3188,7 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
     var uriString by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     suspend fun load(uri: String) {
         val raw = store.readTextFrom(android.net.Uri.parse(uri))
@@ -3198,7 +3199,7 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
     LaunchedEffect(Unit) {
         store.groupFileUri.firstOrNull()?.takeIf { it.isNotBlank() }?.let { saved ->
             uriString = saved
-            fileName = saved.substringAfterLast('/').substringAfterLast('%2F')
+            fileName = saved.substringAfterLast('/').substringAfterLast("%2F")
             load(saved)
         }
     }
