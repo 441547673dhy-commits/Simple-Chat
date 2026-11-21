@@ -124,6 +124,12 @@ class ChatViewModel(
     private var pendingTitle: String? = null
 
     init {
+        // 外部（设置页的群聊同步等）改了消息 → 重载当前分支，免得"写了看不见"
+        viewModelScope.launch {
+            repository.externalChange.collect {
+                currentConversationId?.let { id -> if (!isStreaming) reloadPath(id) }
+            }
+        }
         viewModelScope.launch {
             val stored = repository.findDraftTitle(DraftEntity.NewConversation)
             pendingTitle = stored

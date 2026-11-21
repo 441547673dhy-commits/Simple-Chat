@@ -438,6 +438,17 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
     }
 
     /**
+     * 外部改了某个会话的消息（比如群聊同步）后，通知界面重载。
+     *
+     * 为什么需要：设置页直接写库，聊天页的路径是缓存的，
+     * 不重载就"消息写进去了但看不见"（2026-11-22 实测，重启才出现）。
+     */
+    private val _externalChange = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val externalChange: kotlinx.coroutines.flow.StateFlow<Int> = _externalChange
+
+    fun notifyExternalChange() { _externalChange.value += 1 }
+
+    /**
      * 把群聊记录**追加**进这个会话（不新建、不覆盖）。
      *
      * 身份：她自己说的写成 `assistant`，别人说的写成 `user` 且带 `[2号→3号]` 前缀。
@@ -474,6 +485,7 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
             written++
             t += 1_000
         }
+        if (written > 0) notifyExternalChange()
         written
     }
 
