@@ -451,6 +451,8 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         conversationId: String,
         selfName: String,
         lines: List<GroupLine>,
+        /** 已经同步过的最大 seq；小于等于它的一律跳过（防重复追加）。 */
+        afterSeq: Int = 0,
         /** 文件时间戳缺失时用它兜底（每条 +1 秒，避免同毫秒乱序）。 */
         baseTime: Long = System.currentTimeMillis(),
     ): Int = db.withTransaction {
@@ -458,6 +460,7 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         var written = 0
         var t = baseTime
         lines.forEach { line ->
+            if (line.seq in 1..afterSeq) return@forEach
             if (!GroupChat.isSpeakable(line)) return@forEach
             val (isSelf, content) = GroupChat.render(line, selfName)
             val entity = addSibling(

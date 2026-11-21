@@ -289,6 +289,17 @@ class SettingsStore(
      * 6 号 的档案（人还在，但记忆串了），而且界面上看不出来 —— 比"没绑"危险得多。
      * 现在没绑就是没绑，宁可空着。
      */
+    /** 这个会话已经同步到群聊记录的第几号（防重复追加）。 */
+    suspend fun groupSyncSeqFor(conversationId: String?): Int =
+        if (conversationId.isNullOrBlank()) 0
+        else preferences.data.first()[stringPreferencesKey("group_seq_$conversationId")]
+            ?.toIntOrNull() ?: 0
+
+    suspend fun setGroupSyncSeq(conversationId: String?, seq: Int) {
+        if (conversationId.isNullOrBlank()) return
+        preferences.edit { it[stringPreferencesKey("group_seq_$conversationId")] = seq.toString() }
+    }
+
     /** 读任意 SAF 文件的文本（群聊记录同步用）。失败返回空串，不抛。 */
     suspend fun readTextFrom(uri: android.net.Uri): String = withContext(Dispatchers.IO) {
         runCatching {

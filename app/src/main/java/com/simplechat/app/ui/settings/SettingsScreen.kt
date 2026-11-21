@@ -280,25 +280,29 @@ fun SettingsScreen(
     }
     // ── 群聊记录同步（A 方案）：选文件 → 预览 → 确认写入 ──
     var pendingGroup by remember { mutableStateOf<List<com.simplechat.app.data.GroupLine>?>(null) }
+    var pendingAfter by remember { mutableStateOf(0) }
     val groupPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             val raw = store.readTextFrom(uri)
+            pendingAfter = store.groupSyncSeqFor(conversationId)
             pendingGroup = com.simplechat.app.data.GroupChat.parse(raw)
         }
     }
 
     // 预览对话框：先算清楚"将追加几条、其中她自己几条"，确认后才写
     pendingGroup?.let { parsed ->
-        val speakable = parsed.filter { com.simplechat.app.data.GroupChat.isSpeakable(it) }
+        val speakable = parsed
+            .filter { com.simplechat.app.data.GroupChat.isSpeakable(it) }
+            .filter { it.seq !in 1..pendingAfter }
         val myName = personaDisplayName(personaUri).substringBefore("-")
         val mine = speakable.count { it.from == myName }
         android.app.AlertDialog.Builder(context)
             .setTitle("追加群聊记录？")
             .setMessage(
-                "共 ${'$'}{parsed.size} 行可用 ${'$'}{speakable.size} 条：\n" +
+                "共 ${'$'}{parsed.size} 行，其中未同步 ${'$'}{speakable.size} 条：\n" +
                     "她自己 ${'$'}mine 条（写成她的发言）· 别人 ${'$'}{speakable.size - mine} 条（写成对方说的话）\n\n" +
                     "只追加，不改已有消息。",
             )
@@ -309,7 +313,8 @@ fun SettingsScreen(
                     return@setPositiveButton
                 }
                 scope.launch {
-                    val written = repository.appendGroupLines(conv, myName, speakable)
+                    val written = repository.appendGroupLines(conv, myName, speakable, pendingAfter)
+                    speakable.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
                     pendingGroup = null
                     android.widget.Toast
                         .makeText(context, "已追加 ${'$'}written 条", android.widget.Toast.LENGTH_SHORT)

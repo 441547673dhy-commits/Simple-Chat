@@ -65,9 +65,13 @@ object GroupChat {
      *
      * @return `isSelf=true` 表示这是她自己说的（写成 assistant），否则是别人说的（user）。
      */
-    fun render(line: GroupLine, selfName: String): Pair<Boolean, String> =
+    fun render(line: GroupLine, selfName: String, hostName: String = "大馋鬼"): Pair<Boolean, String> =
         if (line.from == selfName) {
             true to line.text
+        } else if (line.from == hostName) {
+            // 他本人的话不给前缀 —— 她要把它当成"他对我说的话"，
+            // 而不是"某个叫大馋鬼的第三方"（2026-11-21 实测）
+            false to line.text
         } else {
             val prefix = if (line.to == null) "[${line.from}]" else "[${line.from}→${line.to}]"
             false to "$prefix ${line.text}"
