@@ -317,9 +317,16 @@ fun SettingsScreen(
                     val msg = try {
                         val written = repository.appendGroupLines(conv, myName, speakable, pendingAfter)
                         speakable.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
-                        // 写库不刷新界面会看不见：提示他回对话页（那条在末尾）
+                        com.simplechat.app.data.GroupSyncLog.write(
+                            context, conv, myName, parsed.size, speakable.size, pendingAfter,
+                            "written=" + written,
+                        )
                         "已追加 " + written + " 条（回对话页就能看到）"
                     } catch (e: Exception) {
+                        com.simplechat.app.data.GroupSyncLog.write(
+                            context, conv, myName, parsed.size, speakable.size, pendingAfter,
+                            "ERROR " + e.javaClass.simpleName + ": " + (e.message ?: ""),
+                        )
                         "追加失败：" + (e.message ?: e::class.java.simpleName)
                     }
                     pendingGroup = null
