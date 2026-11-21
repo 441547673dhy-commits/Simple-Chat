@@ -647,10 +647,10 @@ fun SettingsScreen(
                                 logPicker.launch(arrayOf("text/*", "application/octet-stream"))
                             },
                             onUnbindPersona = {
-                                scope.launch { store.setPersonaFileUri("", chatViewModel.currentConversationId) }
+                                scope.launch { store.setPersonaFileUri("", conversationId) }
                             },
                             onUnbindLog = {
-                                scope.launch { store.setPersonaLogUri("", chatViewModel.currentConversationId) }
+                                scope.launch { store.setPersonaLogUri("", conversationId) }
                             },
                             recentOnly = stored.recentOnly,
                             onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
