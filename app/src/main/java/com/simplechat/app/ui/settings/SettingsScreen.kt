@@ -251,6 +251,8 @@ fun SettingsScreen(
     }
     var presets by remember { mutableStateOf<List<Preset>>(emptyList()) }
 
+    var guardLevel by remember { mutableStateOf(0) }
+    var freqPenalty by remember { mutableStateOf(0.0) }
     var personaFileName by remember { mutableStateOf("") }
     var personaLogName by remember { mutableStateOf("") }
     // 会话级绑定：这里显示的是"这个会话实际生效的那一个"，不是全局默认
@@ -258,6 +260,8 @@ fun SettingsScreen(
     var personaLogUri by remember { mutableStateOf("") }
     LaunchedEffect(conversationId) {
         personaUri = store.personaFileUriFor(conversationId)
+        guardLevel = store.repeatGuardLevelFor(conversationId)
+        freqPenalty = store.frequencyPenaltyFor(conversationId)
         personaLogUri = store.personaLogUriFor(conversationId)
         // 标出"继承全局"：会话没有自己的绑定时会回落到全局那份，
         // 以前看不出来，导致在 A 会话改了绑定却影响了 B（排查了很久）
@@ -655,11 +659,18 @@ fun SettingsScreen(
                             recentOnly = stored.recentOnly,
                             onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
                             recentBudgetChars = stored.recentBudgetChars,
-                            frequencyPenalty = stored.frequencyPenalty,
+                            frequencyPenalty = freqPenalty,
+                            guardLevel = guardLevel,
+                            onCycleGuard = {
+                                val next3 = (guardLevel + 1) % 4
+                                guardLevel = next3
+                                scope.launch { store.setRepeatGuardLevel(conversationId, next3) }
+                            },
                             onCycleFreqPenalty = {
                                 val steps2 = listOf(0.0, 0.2, 0.3, 0.5)
-                                val next2 = steps2[(steps2.indexOf(stored.frequencyPenalty) + 1) % steps2.size]
-                                scope.launch { store.setFrequencyPenalty(next2) }
+                                val next2 = steps2[(steps2.indexOf(freqPenalty) + 1) % steps2.size]
+                                freqPenalty = next2
+                                scope.launch { store.setFrequencyPenaltyFor(conversationId, next2) }
                             },
                             onCycleBudget = {
                                 // 档位从省到贵，最后一档 0 = 不限（发全部历史，等于官方行为）
@@ -1461,6 +1472,8 @@ private fun DataPage(
     onCycleBudget: () -> Unit = {},
     frequencyPenalty: Double = 0.0,
     onCycleFreqPenalty: () -> Unit = {},
+    guardLevel: Int = 0,
+    onCycleGuard: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
     onUnbindLog: () -> Unit = {},
 ) {
@@ -1516,9 +1529,15 @@ private fun DataPage(
             onCheckedChange = onToggleRecent,
         )
         SettingsActionRow(
+            label = "高频词限制",
+            hint = listOf("关", "中：同词≤2连，「极其」每条≤1", "高：再禁连续三轮", "极强：每五条≤1次")[guardLevel] +
+                " · 点按切换（按会话生效）",
+            onClick = onCycleGuard,
+        )
+        SettingsActionRow(
             label = "防复读强度",
             hint = if (frequencyPenalty <= 0.0) {
-                "关 · 点按切换（她也能在回复里写 %%freq=0.3%% 自己调）"
+                "关 · 点按切换（只在 OpenAI 兼容通道生效）"
             } else {
                 "%.1f · 点按切换（只在 OpenAI 兼容通道生效）".format(frequencyPenalty)
             },

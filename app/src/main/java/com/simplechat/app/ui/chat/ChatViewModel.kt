@@ -1648,7 +1648,7 @@ class ChatViewModel(
                         maxTokens = settings.maxTokens,
                         temperature = settings.temperature.toDouble(),
                         topP = settings.topP.toDouble(),
-                        frequencyPenalty = settingsStore.flow.first().frequencyPenalty,
+                        frequencyPenalty = settingsStore.frequencyPenaltyFor(currentConversationId),
                         extraHeaders = providerKind.headersFor(openCodeSessionId),
                     ).collect { event ->
                         when (event) {
@@ -2007,6 +2007,14 @@ class ChatViewModel(
             appendLine().appendLine()
         }
         append(settings.composedSystemPrompt(presets))
+        // 频词限制：会话级开关，规则文字由 App 拼进来，不写进她的档案
+        val guard = settingsStore.repeatGuardText(
+            settingsStore.repeatGuardLevelFor(currentConversationId),
+        )
+        if (guard.isNotBlank()) {
+            appendLine().appendLine()
+            append("【语言约束】").append(guard)
+        }
     }.trim()
 
     private fun currentTimeLine(): String {

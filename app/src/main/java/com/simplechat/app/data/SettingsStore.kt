@@ -337,6 +337,53 @@ class SettingsStore(
         preferences.edit { it[Keys.FREQ_PENALTY] = value.coerceIn(0.0, 1.0) }
     }
 
+
+    /**
+     * 会话级「防复读强度」（0 = 关；只在 OpenAI 兼容通道生效）。
+     *
+     * 和注入文件一样按会话存：同一条鱼在不同对话里可以不同强度。
+     */
+    suspend fun frequencyPenaltyFor(conversationId: String?): Double =
+        if (conversationId.isNullOrBlank()) flow.first().frequencyPenalty
+        else preferences.data.first()[stringPreferencesKey("freq_penalty_$conversationId")]
+            ?.toDoubleOrNull() ?: 0.0
+
+    suspend fun setFrequencyPenaltyFor(conversationId: String?, value: Double) {
+        if (conversationId.isNullOrBlank()) {
+            setFrequencyPenalty(value); return
+        }
+        preferences.edit {
+            it[stringPreferencesKey("freq_penalty_$conversationId")] = value.coerceIn(0.0, 1.0).toString()
+        }
+    }
+
+    /**
+     * 会话级「高频词限制」档位：0 关 / 1 中 / 2 高 / 3 极强。
+     *
+     * 规则文字由 App **拼进系统提示**（不写进注入文件），所以换会话可以分别设，
+     * 也不会污染她的档案。
+     */
+    suspend fun repeatGuardLevelFor(conversationId: String?): Int =
+        if (conversationId.isNullOrBlank()) 0
+        else preferences.data.first()[stringPreferencesKey("guard_level_$conversationId")]
+            ?.toIntOrNull() ?: 0
+
+    suspend fun setRepeatGuardLevel(conversationId: String?, level: Int) {
+        if (conversationId.isNullOrBlank()) return
+        preferences.edit {
+            it[stringPreferencesKey("guard_level_$conversationId")] = level.coerceIn(0, 3).toString()
+        }
+    }
+
+    /** 高频词限制的规则文字（按档位），拼进系统提示用。 */
+    fun repeatGuardText(level: Int): String = when (level) {
+        1 -> "同一个词连续出现不得超过 2 次；「极其」每条最多 1 次。"
+        2 -> "同一个词连续出现不得超过 2 次；「极其」每条最多 1 次，且连续三轮内不得再次出现。"
+        3 -> "「极其」这类高频词，**每五条回复最多出现 1 次**；其余时候一律换说法（用动作、断句、沉默）。" +
+            "同一个词连续出现超过 2 次视为失手。"
+        else -> ""
+    }
+
     /** 发送预算（字符）。见 [StoredSettings.recentBudgetChars]。 */
     suspend fun setRecentBudgetChars(chars: Int) {
         preferences.edit { it[Keys.RECENT_BUDGET] = chars }
