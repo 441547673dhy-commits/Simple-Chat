@@ -111,7 +111,7 @@ class GroupRunner(
             temperature = 0.8,
         ).toList()
 
-        return chunks.filterIsInstance<StreamEvent.Delta>()
+        return chunks.filterIsInstance<StreamEvent.Content>()
             .joinToString("") { it.text }
             .trim()
     }
