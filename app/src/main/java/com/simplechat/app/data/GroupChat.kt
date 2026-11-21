@@ -42,7 +42,13 @@ object GroupChat {
 
     private fun parseOne(line: String): GroupLine? {
         val obj = json.parseToJsonElement(line) as? JsonObject ?: return null
-        fun str(key: String): String? = runCatching { obj[key]?.jsonPrimitive?.content }.getOrNull()
+        // 注意：JSON 的 null 走 jsonPrimitive 会变成字符串 "null"，
+        // 必须先认 JsonNull，否则渲染出 `[大馋鬼→null]`（2026-11-21 实测）
+        fun str(key: String): String? {
+            val el = obj[key] ?: return null
+            if (el is kotlinx.serialization.json.JsonNull) return null
+            return runCatching { el.jsonPrimitive.content }.getOrNull()
+        }
         val text = str("text") ?: return null
         return GroupLine(
             seq = str("seq")?.toIntOrNull() ?: 0,
