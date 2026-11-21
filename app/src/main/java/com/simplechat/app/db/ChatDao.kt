@@ -424,8 +424,8 @@ interface MessageDao {
     suspend fun softDelete(id: String, placeholder: String)
 
     /** 把一条消息挂到新的父亲下（「只删这条」时，子节点接到祖父上）。 */
-    @Query("UPDATE messages SET parentId = :newParent WHERE id = :id")
-    suspend fun reparent(id: String, newParent: String)
+    @Query("UPDATE messages SET parentId = :newParent, variantIndex = :variantIndex WHERE id = :id")
+    suspend fun reparent(id: String, newParent: String, variantIndex: Int)
 
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId")
     suspend fun countFor(conversationId: String): Int

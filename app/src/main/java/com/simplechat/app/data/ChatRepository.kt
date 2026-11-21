@@ -644,14 +644,18 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
      * 用在"删错了、不想连带后面"的场合。接口上它可能让后面的"回答"失去"问题"
      * （上下文会短暂不连贯），但**不丢东西**——这是他明确要的取舍。
      */
-    suspend fun deleteMessageOnly(messageId: String): Int {
-        val node = messages.exportHeader(messageId) ?: return 0
+    suspend fun deleteMessageOnly(messageId: String): Int = db.withTransaction {
+        val node = messages.exportHeader(messageId) ?: return@withTransaction 0
         val all = messages.getLightFor(node.conversationId)
-        all.filter { it.parentId == messageId }.forEach { child ->
-            messages.reparent(child.id, node.parentId)
+        val kids = all.filter { it.parentId == messageId }
+        // 版本号必须重排：祖父下面已经有同样编号的兄弟，直接挂会撞唯一键
+        // （2026-11-21 实测崩溃：SQLiteConstraintException in reparent）
+        kids.forEachIndexed { i, child ->
+            val next = messages.nextVariantIndex(node.conversationId, node.parentId) + i
+            messages.reparent(child.id, node.parentId, next)
         }
         messages.deleteByIds(listOf(messageId))
-        return 1
+        1
     }
 
     /** 切到某个版本。同一个父亲下只有它会 `active = 1`。 */
