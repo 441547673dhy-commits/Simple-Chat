@@ -4,6 +4,7 @@ import com.simplechat.app.net.ChatApi
 import com.simplechat.app.net.ModelInfo
 import com.simplechat.app.net.OutMessageDto
 import com.simplechat.app.net.StreamEvent
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 
 /**
@@ -138,12 +139,28 @@ object GroupRules {
             "$who$to：${line.text}"
         }
 
+    /** JSON 字符串转义（只处理群聊会出现的字符）。 */
+    private fun esc(s: String): String = buildString {
+        append('"')
+        s.forEach { c ->
+            when (c) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (c < ' ') append("?") else append(c)
+            }
+        }
+        append('"')
+    }
+
     /** 造一行 JSONL。 */
     fun buildLine(from: String, to: String?, text: String): String {
         val ts = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
-        val seq = System.currentTimeMillis() % 100000
-        return "{\"seq\":$seq,\"ts\":\"$ts\",\"from\":" + org.json.JSONObject.quote(from) +
-            ",\"to\":" + (to?.let { org.json.JSONObject.quote(it) } ?: "null") +
-            ",\"text\":" + org.json.JSONObject.quote(text) + ",\"kind\":\"say\"}"
+        val seq = (System.currentTimeMillis() / 1000).toInt()
+        return "{\"seq\":" + seq + ",\"ts\":\"" + ts + "\",\"from\":" + esc(from) +
+            ",\"to\":" + (to?.let { esc(it) } ?: "null") +
+            ",\"text\":" + esc(text) + ",\"kind\":\"say\"}"
     }
 }
