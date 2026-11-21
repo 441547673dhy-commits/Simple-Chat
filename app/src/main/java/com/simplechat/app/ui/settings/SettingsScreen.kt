@@ -3234,8 +3234,10 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
         }
 
         if (lines.isNotEmpty()) {
+            // 固定高度：这个页面的父容器是可滚动的，weight(1f) 在那种父容器里会被压成 0
+            // （2026-11-22 实测：时间线完全不显示，只能看到输入框）
             LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = Space.Screen),
+                modifier = Modifier.height(380.dp).fillMaxWidth().padding(horizontal = Space.Screen),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
             ) {
                 items(lines.size) { index ->
