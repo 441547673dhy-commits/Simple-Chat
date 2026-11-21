@@ -302,8 +302,9 @@ fun SettingsScreen(
         android.app.AlertDialog.Builder(context)
             .setTitle("追加群聊记录？")
             .setMessage(
-                "共 ${'$'}{parsed.size} 行，其中未同步 ${'$'}{speakable.size} 条：\n" +
-                    "她自己 ${'$'}mine 条（写成她的发言）· 别人 ${'$'}{speakable.size - mine} 条（写成对方说的话）\n\n" +
+                "共 " + parsed.size + " 行，其中未同步 " + speakable.size + " 条：\n" +
+                    "她自己 " + mine + " 条（写成她的发言）· 别人 " +
+                    (speakable.size - mine) + " 条（写成对方说的话）\n\n" +
                     "只追加，不改已有消息。",
             )
             .setPositiveButton("追加") { _, _ ->
@@ -313,12 +314,16 @@ fun SettingsScreen(
                     return@setPositiveButton
                 }
                 scope.launch {
-                    val written = repository.appendGroupLines(conv, myName, speakable, pendingAfter)
-                    speakable.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
+                    val msg = try {
+                        val written = repository.appendGroupLines(conv, myName, speakable, pendingAfter)
+                        speakable.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
+                        // 写库不刷新界面会看不见：提示他回对话页（那条在末尾）
+                        "已追加 " + written + " 条（回对话页就能看到）"
+                    } catch (e: Exception) {
+                        "追加失败：" + (e.message ?: e::class.java.simpleName)
+                    }
                     pendingGroup = null
-                    android.widget.Toast
-                        .makeText(context, "已追加 ${'$'}written 条", android.widget.Toast.LENGTH_SHORT)
-                        .show()
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                 }
             }
             .setNegativeButton("取消", null)
