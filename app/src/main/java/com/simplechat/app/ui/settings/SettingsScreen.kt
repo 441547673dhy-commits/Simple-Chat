@@ -1,5 +1,8 @@
 package com.simplechat.app.ui.settings
 
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import android.content.Intent
 import java.io.File
 import android.net.Uri
@@ -642,6 +645,12 @@ fun SettingsScreen(
                             },
                             onPickLog = {
                                 logPicker.launch(arrayOf("text/*", "application/octet-stream"))
+                            },
+                            onUnbindPersona = {
+                                scope.launch { store.setPersonaFileUri("", chatViewModel.currentConversationId) }
+                            },
+                            onUnbindLog = {
+                                scope.launch { store.setPersonaLogUri("", chatViewModel.currentConversationId) }
                             },
                             recentOnly = stored.recentOnly,
                             onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
@@ -1452,7 +1461,10 @@ private fun DataPage(
     onCycleBudget: () -> Unit = {},
     frequencyPenalty: Double = 0.0,
     onCycleFreqPenalty: () -> Unit = {},
+    onUnbindPersona: () -> Unit = {},
+    onUnbindLog: () -> Unit = {},
 ) {
+    var unbindAsk by remember { mutableStateOf<String?>(null) }
     SettingsSectionLabel("角色档案")
     SettingsCard {
         SettingsActionRow(
@@ -1463,6 +1475,7 @@ private fun DataPage(
                 personaFileName
             },
             onClick = onPickPersona,
+            onLongClick = { if (personaFileName.isNotBlank()) unbindAsk = "persona" },
         )
         SettingsActionRow(
             label = "记忆日志（追加）",
@@ -1472,7 +1485,31 @@ private fun DataPage(
                 personaLogName
             },
             onClick = onPickLog,
+            onLongClick = { if (personaLogName.isNotBlank()) unbindAsk = "log" },
         )
+
+        // 解除绑定：长按那一行触发，确认后清空本会话的绑定（不改全局、不动文件）
+        unbindAsk?.let { which ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { unbindAsk = null },
+                title = { Text("解除绑定？") },
+                text = {
+                    Text(
+                        if (which == "persona") "这个会话将不再读取角色档案（文件不会被删）。"
+                        else "这个会话将不再写记忆日志（文件不会被删）。",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (which == "persona") onUnbindPersona() else onUnbindLog()
+                        unbindAsk = null
+                    }) { Text("解除") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { unbindAsk = null }) { Text("取消") }
+                },
+            )
+        }
         SettingsSwitchRow(
             label = "只发送最近内容",
             checked = recentOnly,
@@ -2618,12 +2655,24 @@ private fun SettingsActionRow(
     destructive: Boolean = false,
     /** 导入进行中之类的"暂时不能点"。 */
     enabled: Boolean = true,
+    /** 长按（用于「解除绑定」这类不该误触的操作）。null = 不支持长按。 */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val colors = LocalChatColors.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
+            .then(
+                if (onLongClick == null) {
+                    Modifier.clickable(enabled = enabled, onClick = onClick)
+                } else {
+                    Modifier.combinedClickable(
+                        enabled = enabled,
+                        onLongClick = onLongClick,
+                        onClick = onClick,
+                    )
+                },
+            )
             .heightIn(min = Space.Row)
             .padding(horizontal = Space.Screen, vertical = Space.RowPadY),
         verticalArrangement = Arrangement.spacedBy(3.dp),
