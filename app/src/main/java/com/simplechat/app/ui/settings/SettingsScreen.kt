@@ -276,6 +276,49 @@ fun SettingsScreen(
         personaLogName = personaDisplayName(personaLogUri) +
             if (inheritLog) "（继承全局）" else ""
     }
+    // ── 群聊记录同步（A 方案）：选文件 → 预览 → 确认写入 ──
+    var pendingGroup by remember { mutableStateOf<List<com.simplechat.app.data.GroupLine>?>(null) }
+    val groupPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val raw = store.readTextFrom(uri)
+            pendingGroup = com.simplechat.app.data.GroupChat.parse(raw)
+        }
+    }
+
+    // 预览对话框：先算清楚"将追加几条、其中她自己几条"，确认后才写
+    pendingGroup?.let { parsed ->
+        val speakable = parsed.filter { com.simplechat.app.data.GroupChat.isSpeakable(it) }
+        val myName = personaDisplayName(personaUri).substringBefore("-")
+        val mine = speakable.count { it.from == myName }
+        android.app.AlertDialog.Builder(context)
+            .setTitle("追加群聊记录？")
+            .setMessage(
+                "共 ${'$'}{parsed.size} 行可用 ${'$'}{speakable.size} 条：\n" +
+                    "她自己 ${'$'}mine 条（写成她的发言）· 别人 ${'$'}{speakable.size - mine} 条（写成对方说的话）\n\n" +
+                    "只追加，不改已有消息。",
+            )
+            .setPositiveButton("追加") { _, _ ->
+                val conv = conversationId
+                if (conv == null) {
+                    pendingGroup = null
+                    return@setPositiveButton
+                }
+                scope.launch {
+                    val written = repository.appendGroupLines(conv, myName, speakable)
+                    pendingGroup = null
+                    android.widget.Toast
+                        .makeText(context, "已追加 ${'$'}written 条", android.widget.Toast.LENGTH_SHORT)
+                        .show()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+        pendingGroup = null
+    }
+
     val personaPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -667,6 +710,9 @@ fun SettingsScreen(
                                 val n = (guardRun + 1) % 3
                                 guardRun = n
                                 scope.launch { store.setGuardRunLevel(conversationId, n) }
+                            },
+                            onPickGroupChat = {
+                                groupPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
                             },
                             guardWord = guardWord,
                             onCycleWordGuard = {
@@ -1484,6 +1530,7 @@ private fun DataPage(
     onCycleRunGuard: () -> Unit = {},
     guardWord: Int = 0,
     onCycleWordGuard: () -> Unit = {},
+    onPickGroupChat: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
     onUnbindLog: () -> Unit = {},
 ) {
@@ -1558,6 +1605,11 @@ private fun DataPage(
                 "%.1f · 点按切换（只在 OpenAI 兼容通道生效）".format(frequencyPenalty)
             },
             onClick = onCycleFreqPenalty,
+        )
+        SettingsActionRow(
+            label = "同步群聊记录",
+            hint = "选 ${'$'}{群聊.jsonl}，把新消息追加进本会话（先预览，确认才写）",
+            onClick = onPickGroupChat,
         )
         SettingsActionRow(
             label = "发送预算",

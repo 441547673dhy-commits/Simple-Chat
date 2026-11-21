@@ -1410,6 +1410,19 @@ class ChatViewModel(
         return false
     }
 
+    /**
+     * 把群聊记录追加进当前会话（A 方案）。
+     *
+     * @param selfName 这个会话里"她"在群里的名字（如「2号」）；决定哪些话写成 assistant。
+     * @return 实际写入条数。成功后会重新加载当前分支。
+     */
+    suspend fun appendGroupChat(lines: List<com.simplechat.app.data.GroupLine>, selfName: String): Int {
+        val conv = currentConversationId ?: return 0
+        val written = repository.appendGroupLines(conv, selfName, lines)
+        if (written > 0) reloadPath(conv)
+        return written
+    }
+
     fun stop() {
         if (!isStreaming) return
         stoppedByUser = true

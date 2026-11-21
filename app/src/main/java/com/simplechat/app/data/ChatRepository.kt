@@ -410,6 +410,8 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         status: MessageStatus = MessageStatus.DONE,
         /** 这条由哪个模型产生；用户消息传 null。 */
         model: String? = null,
+        /** 指定时间戳；群聊同步要用记录里的时间，不能用"现在"。 */
+        createdAt: Long = System.currentTimeMillis(),
     ): MessageEntity {
         val id = UUID.randomUUID().toString()
         val entity = newMessageEntity(
@@ -423,6 +425,7 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
             reasoning = reasoning,
             status = status,
             model = model,
+            now = createdAt,
         ).withOffloadedImages()
         messages.upsert(entity)
         messages.activate(id, conversationId, parentId)
@@ -432,6 +435,43 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         // The inserted entity is already available. Reading it back can exceed CursorWindow
         // for a large prompt or several attachments, before the network request even starts.
         return entity
+    }
+
+    /**
+     * 把群聊记录**追加**进这个会话（不新建、不覆盖）。
+     *
+     * 身份：她自己说的写成 `assistant`，别人说的写成 `user` 且带 `[2号→3号]` 前缀。
+     * 这样她是"亲身经历"，而不是读到一份转述。
+     *
+     * 全部串成**一条链**（每条的 parent 是上一条）——挂错了树就断了。
+     *
+     * @return 实际写入条数。
+     */
+    suspend fun appendGroupLines(
+        conversationId: String,
+        selfName: String,
+        lines: List<GroupLine>,
+        /** 文件时间戳缺失时用它兜底（每条 +1 秒，避免同毫秒乱序）。 */
+        baseTime: Long = System.currentTimeMillis(),
+    ): Int = db.withTransaction {
+        var parent = tailId(conversationId)
+        var written = 0
+        var t = baseTime
+        lines.forEach { line ->
+            if (!GroupChat.isSpeakable(line)) return@forEach
+            val (isSelf, content) = GroupChat.render(line, selfName)
+            val entity = addSibling(
+                conversationId = conversationId,
+                parentId = parent,
+                role = if (isSelf) MessageRole.ASSISTANT else MessageRole.USER,
+                content = content,
+                createdAt = t,
+            )
+            parent = entity.id
+            written++
+            t += 1_000
+        }
+        written
     }
 
     /** 把实体包成 UI 模型，δ 补上兄弟数。 */

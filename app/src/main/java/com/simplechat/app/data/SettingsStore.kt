@@ -289,6 +289,15 @@ class SettingsStore(
      * 6 号 的档案（人还在，但记忆串了），而且界面上看不出来 —— 比"没绑"危险得多。
      * 现在没绑就是没绑，宁可空着。
      */
+    /** 读任意 SAF 文件的文本（群聊记录同步用）。失败返回空串，不抛。 */
+    suspend fun readTextFrom(uri: android.net.Uri): String = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                input.bufferedReader(Charsets.UTF_8).readText()
+            }.orEmpty()
+        }.getOrDefault("")
+    }
+
     suspend fun readPersonaFile(conversationId: String? = null): String {
         val stored = flow.first()
         val uri = if (conversationId.isNullOrBlank()) {
