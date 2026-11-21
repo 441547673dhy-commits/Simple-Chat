@@ -300,6 +300,23 @@ class SettingsStore(
         preferences.edit { it[stringPreferencesKey("group_seq_$conversationId")] = seq.toString() }
     }
 
+    /** 群聊文件的 URI（全局只一个，群聊页打开时自动载入）。 */
+    val groupFileUri: Flow<String> = preferences.data.map { it[Keys.GROUP_FILE].orEmpty() }
+
+    suspend fun setGroupFileUri(uri: String) {
+        preferences.edit { it[Keys.GROUP_FILE] = uri }
+    }
+
+    /** 往群聊文件**追加**一行（SAF 的 "wa" 模式）。失败返回 false。 */
+    suspend fun appendGroupLine(uriString: String, line: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val uri = android.net.Uri.parse(uriString)
+            context.contentResolver.openOutputStream(uri, "wa")?.use { out ->
+                out.write((line + "\n").toByteArray(Charsets.UTF_8))
+            } != null
+        }.getOrDefault(false)
+    }
+
     /** 读任意 SAF 文件的文本（群聊记录同步用）。失败返回空串，不抛。 */
     suspend fun readTextFrom(uri: android.net.Uri): String = withContext(Dispatchers.IO) {
         runCatching {
@@ -789,6 +806,7 @@ class SettingsStore(
         val RECENT_ONLY = booleanPreferencesKey("recent_only")
         val RECENT_BUDGET = intPreferencesKey("recent_budget_chars")
         val FREQ_PENALTY = doublePreferencesKey("frequency_penalty")
+        val GROUP_FILE = stringPreferencesKey("group_file_uri")
 
     }
 }

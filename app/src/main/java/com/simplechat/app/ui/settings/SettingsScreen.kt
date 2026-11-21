@@ -120,6 +120,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -3175,57 +3176,126 @@ internal fun personaDisplayName(uri: String): String {
 }
 
 /**
- * 群聊记录浏览（只读）。
+ * 群聊界面：所有人同屏 + 你也能说话。
  *
- * 不参与任何写入 —— 就是"看"，跟她们看到的顺序一致。
+ * 数据源就是那个 `群聊.jsonl` —— 你发的话写回这个文件，
+ * 她们的话由「抽发言」写进来，这里只负责**看和说**。
  */
 @Composable
 private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
     var lines by remember { mutableStateOf<List<com.simplechat.app.data.GroupLine>>(emptyList()) }
     var fileName by remember { mutableStateOf("") }
+    var uriString by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+
+    suspend fun load(uri: String) {
+        val raw = store.readTextFrom(android.net.Uri.parse(uri))
+        lines = com.simplechat.app.data.GroupChat.parse(raw)
+    }
+
+    // 打开页面时自动载入上次选的群聊文件
+    LaunchedEffect(Unit) {
+        store.groupFileUri.firstOrNull()?.takeIf { it.isNotBlank() }?.let { saved ->
+            uriString = saved
+            fileName = saved.substringAfterLast('/').substringAfterLast('%2F')
+            load(saved)
+        }
+    }
+
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        uriString = uri.toString()
+        fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "已选择"
         scope.launch {
-            val raw = store.readTextFrom(uri)
-            lines = com.simplechat.app.data.GroupChat.parse(raw)
-            fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "已选择"
+            store.setGroupFileUri(uri.toString())
+            load(uri.toString())
         }
     }
 
-    SettingsSectionLabel("群聊")
+    Column(Modifier.fillMaxSize()) {
+        SettingsSectionLabel("群聊")
+        SettingsCard {
+            SettingsActionRow(
+                label = if (fileName.isBlank()) "选择群聊文件" else "$fileName",
+                hint = if (lines.isEmpty()) "选一个 群聊.jsonl（可读可写，你在这里说的话会写回去）"
+                else "${lines.size} 条 · 点按换文件",
+                onClick = { picker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+            )
+        }
 
-    SettingsCard {
-        SettingsActionRow(
-            label = if (fileName.isBlank()) "选择群聊文件" else "当前：$fileName",
-            hint = if (lines.isEmpty()) "选一个 群聊.jsonl 文件（只读，不会改动）"
-            else "共 ${lines.size} 条 · 点按换文件",
-            onClick = { picker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
-        )
-    }
-
-    if (lines.isNotEmpty()) {
-        SettingsSectionLabel("对话")
-        Column(Modifier.fillMaxWidth().padding(horizontal = Space.Screen)) {
-            lines.takeLast(200).forEach { line ->
-                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Text(
-                        text = buildString {
-                            append("[${line.from}")
-                            line.to?.let { append("→$it") }
-                            append("] ")
-                            append(line.ts)
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LocalChatColors.current.placeholder,
-                    )
-                    Text(
-                        text = line.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+        if (lines.isNotEmpty()) {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = Space.Screen),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+            ) {
+                items(lines.size) { index ->
+                    val line = lines[index]
+                    val fromMe = line.from == "大馋鬼"
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalAlignment = if (fromMe) Alignment.End else Alignment.Start,
+                    ) {
+                        Text(
+                            text = buildString {
+                                append(line.from)
+                                line.to?.let { append(" → ").append(it) }
+                                append("  ").append(line.ts)
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LocalChatColors.current.placeholder,
+                        )
+                        Text(
+                            text = line.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .background(
+                                    if (fromMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                        )
+                    }
                 }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Space.Screen, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("在群里说一句…") },
+                    maxLines = 3,
+                )
+                TextButton(
+                    enabled = draft.isNotBlank() && uriString.isNotBlank(),
+                    onClick = {
+                        val text = draft.trim()
+                        if (text.isEmpty()) return@TextButton
+                        draft = ""
+                        scope.launch {
+                            val seq = (lines.maxOfOrNull { it.seq } ?: 0) + 1
+                            val line = "{\"seq\":" + seq +
+                                ",\"ts\":\"" + java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date()) +
+                                "\",\"from\":\"大馋鬼\",\"to\":null,\"text\":" +
+                                org.json.JSONObject.quote(text) + ",\"kind\":\"say\"}"
+                            store.appendGroupLine(uriString, line)
+                            load(uriString)
+                        }
+                    },
+                ) { Text("发送") }
             }
         }
     }
