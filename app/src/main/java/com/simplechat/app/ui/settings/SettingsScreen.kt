@@ -3187,8 +3187,37 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
     var fileName by remember { mutableStateOf("") }
     var uriString by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf("") }
+    var members by remember { mutableStateOf<List<com.simplechat.app.data.GroupMember>>(emptyList()) }
+    var randomOrder by remember { mutableStateOf(false) }
+    var running by remember { mutableStateOf(false) }
+    var speaking by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val runner = remember {
+        val app = context.applicationContext as App
+        com.simplechat.app.data.GroupRunner(app.container.chatApi, store)
+    }
+
+    LaunchedEffect(Unit) {
+        store.groupMembers.firstOrNull()?.let { members = it }
+    }
+
+    val memberPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        val guess = (uri.lastPathSegment?.substringAfterLast('/') ?: "成员")
+            .substringBefore("-").substringBefore(".").ifBlank { "成员" }
+        scope.launch {
+            members = members + com.simplechat.app.data.GroupMember(guess, uri.toString())
+            store.setGroupMembers(members)
+        }
+    }
 
     suspend fun load(uri: String) {
         val raw = store.readTextFrom(android.net.Uri.parse(uri))
@@ -3226,10 +3255,43 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
         SettingsSectionLabel("群聊")
         SettingsCard {
             SettingsActionRow(
-                label = if (fileName.isBlank()) "选择群聊文件" else "$fileName",
-                hint = if (lines.isEmpty()) "选一个 群聊.jsonl（可读可写，你在这里说的话会写回去）"
+                label = if (fileName.isBlank()) "选择群聊文件" else "群文件已选",
+                hint = if (lines.isEmpty()) "选一个 群聊.jsonl（可读可写）"
                 else "${lines.size} 条 · 点按换文件",
                 onClick = { picker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+            )
+            RowDivider()
+            SettingsActionRow(
+                label = "群成员（" + members.size + "）",
+                hint = members.joinToString("、") { it.name }.ifBlank { "还没加人 · 点按添加（选她的上下文文件）" },
+                onClick = { memberPicker.launch(arrayOf("text/*", "application/octet-stream")) },
+            )
+            RowDivider()
+            SettingsActionRow(
+                label = "发言顺序",
+                hint = if (randomOrder) "随机 · 点按切回固定" else "固定（按成员顺序）· 点按改成随机",
+                onClick = { randomOrder = !randomOrder },
+            )
+            RowDivider()
+            SettingsActionRow(
+                label = if (running) "正在说话：" + (speaking.ifBlank { "…" }) else "跑一轮",
+                hint = if (running) "跑完会自动刷新；点按可请求停止（当前那条会发完）"
+                else "让群里每个成员各说一句（每人一次请求）",
+                onClick = {
+                    if (running) return@SettingsActionRow
+                    val uri = uriString
+                    if (uri.isBlank() || members.isEmpty()) return@SettingsActionRow
+                    running = true
+                    scope.launch {
+                        try {
+                            runner.runRound(uri, members, randomOrder) { name -> speaking = name }
+                            load(uri)
+                        } finally {
+                            running = false
+                            speaking = ""
+                        }
+                    }
+                },
             )
         }
 

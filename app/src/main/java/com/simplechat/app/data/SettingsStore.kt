@@ -300,6 +300,15 @@ class SettingsStore(
         preferences.edit { it[stringPreferencesKey("group_seq_$conversationId")] = seq.toString() }
     }
 
+    /** 群成员列表（② 引擎用）。 */
+    val groupMembers: Flow<List<GroupMember>> = preferences.data.map { prefs ->
+        GroupMembers.decode(prefs[Keys.GROUP_MEMBERS].orEmpty())
+    }
+
+    suspend fun setGroupMembers(list: List<GroupMember>) {
+        preferences.edit { it[Keys.GROUP_MEMBERS] = GroupMembers.encode(list) }
+    }
+
     /** 群聊文件的 URI（全局只一个，群聊页打开时自动载入）。 */
     val groupFileUri: Flow<String> = preferences.data.map { it[Keys.GROUP_FILE].orEmpty() }
 
@@ -807,6 +816,7 @@ class SettingsStore(
         val RECENT_BUDGET = intPreferencesKey("recent_budget_chars")
         val FREQ_PENALTY = doublePreferencesKey("frequency_penalty")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
+        val GROUP_MEMBERS = stringPreferencesKey("group_members")
 
     }
 }
