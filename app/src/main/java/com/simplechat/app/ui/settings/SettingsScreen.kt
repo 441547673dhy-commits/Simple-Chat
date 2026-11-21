@@ -133,6 +133,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 private enum class SettingsPage(private val parentName: String?) {
     ROOT(null),
     DATA("ROOT"),
+    /** 群聊记录浏览（只读）。 */
+    GROUP("ROOT"),
     API("ROOT"),
     API_PROFILES("API"),
     PRESETS("ROOT"),
@@ -591,6 +593,7 @@ fun SettingsScreen(
             title = when (page) {
                 SettingsPage.ROOT -> stringResource(R.string.settings_title)
                 SettingsPage.DATA -> stringResource(R.string.settings_data)
+                SettingsPage.GROUP -> "群聊记录"
                 SettingsPage.API -> stringResource(R.string.settings_api)
                 SettingsPage.API_PROFILES -> stringResource(R.string.api_profiles_title)
                 SettingsPage.PRESETS -> stringResource(R.string.settings_presets)
@@ -736,6 +739,8 @@ fun SettingsScreen(
                                 scope.launch { store.setRecentBudgetChars(next) }
                             },
                         )
+
+                        SettingsPage.GROUP -> GroupLogPage(store = store)
 
                         SettingsPage.API -> ApiPage(
                             stored = stored,
@@ -1094,6 +1099,13 @@ private fun RootPage(
             label = stringResource(R.string.settings_data),
             value = stringResource(R.string.settings_data_summary),
             onClick = { onOpen(SettingsPage.DATA) },
+        )
+        RowDivider()
+        SettingsNavRow(
+            icon = AppIcons.ListChecks,
+            label = "群聊记录",
+            value = "看群里的对话（只读）",
+            onClick = { onOpen(SettingsPage.GROUP) },
         )
         RowDivider()
         SettingsNavRow(
@@ -3139,4 +3151,61 @@ internal fun personaDisplayName(uri: String): String {
     val decoded = runCatching { android.net.Uri.decode(tail) }.getOrDefault(tail)
     // primary:肥鱼/记忆/6号-上下文.md → 只留最后的文件名，前缀在提示里说
     return decoded.substringAfterLast('/').ifBlank { decoded }
+}
+
+/**
+ * 群聊记录浏览（只读）。
+ *
+ * 不参与任何写入 —— 就是"看"，跟她们看到的顺序一致。
+ */
+@Composable
+private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
+    var lines by remember { mutableStateOf<List<com.simplechat.app.data.GroupLine>>(emptyList()) }
+    var fileName by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val picker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val raw = store.readTextFrom(uri)
+            lines = com.simplechat.app.data.GroupChat.parse(raw)
+            fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "已选择"
+        }
+    }
+
+    SettingsSectionLabel("群聊")
+
+    SettingsCard {
+        SettingsActionRow(
+            label = if (fileName.isBlank()) "选择群聊文件" else "当前：$fileName",
+            hint = if (lines.isEmpty()) "选一个 群聊.jsonl 文件（只读，不会改动）"
+            else "共 ${lines.size} 条 · 点按换文件",
+            onClick = { picker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+        )
+    }
+
+    if (lines.isNotEmpty()) {
+        SettingsSectionLabel("对话")
+        Column(Modifier.fillMaxWidth().padding(horizontal = Space.Screen)) {
+            lines.takeLast(200).forEach { line ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text(
+                        text = buildString {
+                            append("[${line.from}")
+                            line.to?.let { append("→$it") }
+                            append("] ")
+                            append(line.ts)
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalChatColors.current.placeholder,
+                    )
+                    Text(
+                        text = line.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+    }
 }
