@@ -358,31 +358,53 @@ class SettingsStore(
     }
 
     /**
-     * 会话级「高频词限制」档位：0 关 / 1 中 / 2 高 / 3 极强。
+     * 会话级「同词连发」限制：0 关 / 1 同词最多连 2 次 / 2 同词不许连（最多连着出现 1 次，即不重复）。
      *
-     * 规则文字由 App **拼进系统提示**（不写进注入文件），所以换会话可以分别设，
-     * 也不会污染她的档案。
+     * 和「极其配额」拆开：这条管的是**任何词**不许像复读机一样连成一串。
      */
-    suspend fun repeatGuardLevelFor(conversationId: String?): Int =
+    suspend fun guardRunLevelFor(conversationId: String?): Int =
         if (conversationId.isNullOrBlank()) 0
-        else preferences.data.first()[stringPreferencesKey("guard_level_$conversationId")]
+        else preferences.data.first()[stringPreferencesKey("guard_run_$conversationId")]
             ?.toIntOrNull() ?: 0
 
-    suspend fun setRepeatGuardLevel(conversationId: String?, level: Int) {
+    suspend fun setGuardRunLevel(conversationId: String?, level: Int) {
         if (conversationId.isNullOrBlank()) return
         preferences.edit {
-            it[stringPreferencesKey("guard_level_$conversationId")] = level.coerceIn(0, 3).toString()
+            it[stringPreferencesKey("guard_run_$conversationId")] = level.coerceIn(0, 2).toString()
         }
     }
 
-    /** 高频词限制的规则文字（按档位），拼进系统提示用。 */
-    fun repeatGuardText(level: Int): String = when (level) {
-        1 -> "同一个词连续出现不得超过 2 次；「极其」每条最多 1 次。"
-        2 -> "同一个词连续出现不得超过 2 次；「极其」每条最多 1 次，且连续三轮内不得再次出现。"
-        3 -> "「极其」这类高频词，**每五条回复最多出现 1 次**；其余时候一律换说法（用动作、断句、沉默）。" +
-            "同一个词连续出现超过 2 次视为失手。"
+    /**
+     * 会话级「高频词配额」：只管点名的那个词（默认「极其」）。
+     * 0 关 / 1 每条≤1 / 2 每条≤1 且连续三轮禁 / 3 每五条≤1。
+     */
+    suspend fun guardWordLevelFor(conversationId: String?): Int =
+        if (conversationId.isNullOrBlank()) 0
+        else preferences.data.first()[stringPreferencesKey("guard_word_$conversationId")]
+            ?.toIntOrNull() ?: 0
+
+    suspend fun setGuardWordLevel(conversationId: String?, level: Int) {
+        if (conversationId.isNullOrBlank()) return
+        preferences.edit {
+            it[stringPreferencesKey("guard_word_$conversationId")] = level.coerceIn(0, 3).toString()
+        }
+    }
+
+    /** 「同词连发」的规则文字。 */
+    fun guardRunText(level: Int): String = when (level) {
+        1 -> "同一个词连续出现不得超过 2 次。"
+        2 -> "同一个词不许连着重复（最多出现一次就换说法）。"
         else -> ""
     }
+
+    /** 「高频词配额」的规则文字。 */
+    fun guardWordText(level: Int): String = when (level) {
+        1 -> "「极其」每条回复最多 1 次。"
+        2 -> "「极其」每条回复最多 1 次，且连续三轮内不得再次出现。"
+        3 -> "「极其」每五条回复最多出现 1 次；其余时候一律换说法（动作、断句、沉默）。"
+        else -> ""
+    }
+
 
     /** 发送预算（字符）。见 [StoredSettings.recentBudgetChars]。 */
     suspend fun setRecentBudgetChars(chars: Int) {

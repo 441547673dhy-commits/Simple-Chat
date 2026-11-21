@@ -251,7 +251,8 @@ fun SettingsScreen(
     }
     var presets by remember { mutableStateOf<List<Preset>>(emptyList()) }
 
-    var guardLevel by remember { mutableStateOf(0) }
+    var guardRun by remember { mutableStateOf(0) }
+    var guardWord by remember { mutableStateOf(0) }
     var freqPenalty by remember { mutableStateOf(0.0) }
     var personaFileName by remember { mutableStateOf("") }
     var personaLogName by remember { mutableStateOf("") }
@@ -260,7 +261,8 @@ fun SettingsScreen(
     var personaLogUri by remember { mutableStateOf("") }
     LaunchedEffect(conversationId) {
         personaUri = store.personaFileUriFor(conversationId)
-        guardLevel = store.repeatGuardLevelFor(conversationId)
+        guardRun = store.guardRunLevelFor(conversationId)
+        guardWord = store.guardWordLevelFor(conversationId)
         freqPenalty = store.frequencyPenaltyFor(conversationId)
         personaLogUri = store.personaLogUriFor(conversationId)
         // 标出"继承全局"：会话没有自己的绑定时会回落到全局那份，
@@ -660,11 +662,17 @@ fun SettingsScreen(
                             onToggleRecent = { scope.launch { store.setRecentOnly(it) } },
                             recentBudgetChars = stored.recentBudgetChars,
                             frequencyPenalty = freqPenalty,
-                            guardLevel = guardLevel,
-                            onCycleGuard = {
-                                val next3 = (guardLevel + 1) % 4
-                                guardLevel = next3
-                                scope.launch { store.setRepeatGuardLevel(conversationId, next3) }
+                            guardRun = guardRun,
+                            onCycleRunGuard = {
+                                val n = (guardRun + 1) % 3
+                                guardRun = n
+                                scope.launch { store.setGuardRunLevel(conversationId, n) }
+                            },
+                            guardWord = guardWord,
+                            onCycleWordGuard = {
+                                val n = (guardWord + 1) % 4
+                                guardWord = n
+                                scope.launch { store.setGuardWordLevel(conversationId, n) }
                             },
                             onCycleFreqPenalty = {
                                 val steps2 = listOf(0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0)
@@ -1472,8 +1480,10 @@ private fun DataPage(
     onCycleBudget: () -> Unit = {},
     frequencyPenalty: Double = 0.0,
     onCycleFreqPenalty: () -> Unit = {},
-    guardLevel: Int = 0,
-    onCycleGuard: () -> Unit = {},
+    guardRun: Int = 0,
+    onCycleRunGuard: () -> Unit = {},
+    guardWord: Int = 0,
+    onCycleWordGuard: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
     onUnbindLog: () -> Unit = {},
 ) {
@@ -1529,10 +1539,16 @@ private fun DataPage(
             onCheckedChange = onToggleRecent,
         )
         SettingsActionRow(
-            label = "高频词限制",
-            hint = listOf("关", "中：同词≤2连，「极其」每条≤1", "高：再禁连续三轮", "极强：每五条≤1次")[guardLevel] +
-                " · 点按切换（按会话生效）",
-            onClick = onCycleGuard,
+            label = "同词连发",
+            hint = listOf("关", "同词最多连 2 次", "同词不许连（一次就换说法）")[guardRun] +
+                " · 点按切换（管所有词）",
+            onClick = onCycleRunGuard,
+        )
+        SettingsActionRow(
+            label = "「极其」配额",
+            hint = listOf("关", "每条≤1 次", "每条≤1 且连续三轮禁", "每五条≤1 次")[guardWord] +
+                " · 点按切换（只管这个词）",
+            onClick = onCycleWordGuard,
         )
         SettingsActionRow(
             label = "防复读强度",

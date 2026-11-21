@@ -2007,10 +2007,11 @@ class ChatViewModel(
             appendLine().appendLine()
         }
         append(settings.composedSystemPrompt(presets))
-        // 频词限制：会话级开关，规则文字由 App 拼进来，不写进她的档案
-        val guard = settingsStore.repeatGuardText(
-            settingsStore.repeatGuardLevelFor(currentConversationId),
-        )
+        // 语言约束：两条会话级开关（同词连发 / 高频词配额），规则文字由 App 拼进来，
+        // 不写进她的档案文件，所以换会话可以分别设。
+        val runGuard = settingsStore.guardRunText(settingsStore.guardRunLevelFor(currentConversationId))
+        val wordGuard = settingsStore.guardWordText(settingsStore.guardWordLevelFor(currentConversationId))
+        val guard = listOf(runGuard, wordGuard).filter { it.isNotBlank() }.joinToString("")
         if (guard.isNotBlank()) {
             appendLine().appendLine()
             append("【语言约束】").append(guard)
