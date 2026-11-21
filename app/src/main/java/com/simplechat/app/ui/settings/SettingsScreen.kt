@@ -292,50 +292,54 @@ fun SettingsScreen(
         }
     }
 
-    // 预览对话框：先算清楚"将追加几条、其中她自己几条"，确认后才写
+    // 预览对话框：改用 Compose 的 AlertDialog（状态驱动）。
+    // 原生 Builder 在 Compose 里会时灵时不灵（2026-11-22 实测）。
     pendingGroup?.let { parsed ->
         val speakable = parsed
             .filter { com.simplechat.app.data.GroupChat.isSpeakable(it) }
             .filter { it.seq !in 1..pendingAfter }
         val myName = personaDisplayName(personaUri).substringBefore("-")
         val mine = speakable.count { it.from == myName }
-        android.app.AlertDialog.Builder(context)
-            .setTitle("追加群聊记录？")
-            .setMessage(
-                "共 " + parsed.size + " 行，其中未同步 " + speakable.size + " 条：\n" +
-                    "她自己 " + mine + " 条（写成她的发言）· 别人 " +
-                    (speakable.size - mine) + " 条（写成对方说的话）\n\n" +
-                    "只追加，不改已有消息。",
-            )
-            .setPositiveButton("追加") { _, _ ->
-                val conv = conversationId
-                if (conv == null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingGroup = null },
+            title = { Text("追加群聊记录？") },
+            text = {
+                Text(
+                    "共 " + parsed.size + " 行，其中未同步 " + speakable.size + " 条：\n" +
+                        "她自己 " + mine + " 条（写成她的发言）· 别人 " +
+                        (speakable.size - mine) + " 条（写成对方说的话）\n\n" +
+                        "只追加，不改已有消息。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val conv = conversationId
+                    val lines = speakable
                     pendingGroup = null
-                    return@setPositiveButton
-                }
-                scope.launch {
-                    val msg = try {
-                        val written = repository.appendGroupLines(conv, myName, speakable, pendingAfter)
-                        speakable.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
-                        com.simplechat.app.data.GroupSyncLog.write(
-                            context, conv, myName, parsed.size, speakable.size, pendingAfter,
-                            "written=" + written,
-                        )
-                        "已追加 " + written + " 条（回对话页就能看到）"
-                    } catch (e: Exception) {
-                        com.simplechat.app.data.GroupSyncLog.write(
-                            context, conv, myName, parsed.size, speakable.size, pendingAfter,
-                            "ERROR " + e.javaClass.simpleName + ": " + (e.message ?: ""),
-                        )
-                        "追加失败：" + (e.message ?: e::class.java.simpleName)
+                    if (conv != null) {
+                        scope.launch {
+                            val msg = try {
+                                val written = repository.appendGroupLines(conv, myName, lines, pendingAfter)
+                                lines.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
+                                com.simplechat.app.data.GroupSyncLog.write(
+                                    context, conv, myName, parsed.size, lines.size, pendingAfter,
+                                    "written=" + written,
+                                )
+                                "已追加 " + written + " 条"
+                            } catch (e: Exception) {
+                                com.simplechat.app.data.GroupSyncLog.write(
+                                    context, conv, myName, parsed.size, lines.size, pendingAfter,
+                                    "ERROR " + e.javaClass.simpleName + ": " + (e.message ?: ""),
+                                )
+                                "追加失败：" + (e.message ?: e::class.java.simpleName)
+                            }
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                        }
                     }
-                    pendingGroup = null
-                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-        pendingGroup = null
+                }) { Text("追加") }
+            },
+            dismissButton = { TextButton(onClick = { pendingGroup = null }) { Text("取消") } },
+        )
     }
 
     val personaPicker = rememberLauncherForActivityResult(
@@ -1637,7 +1641,7 @@ private fun DataPage(
         )
         SettingsActionRow(
             label = "同步群聊记录",
-            hint = "选 ${'$'}{群聊.jsonl}，把新消息追加进本会话（先预览，确认才写）",
+            hint = "选群聊 jsonl，把新消息追加进本会话（先预览，确认才写）",
             onClick = onPickGroupChat,
         )
         SettingsActionRow(
