@@ -90,12 +90,14 @@ class GroupRunner(
             appendLine("- 不想说，只回 `[END]`。")
         }
 
-        val model = ModelInfo.from(stored.modelId) ?: ModelInfo.from("deepseek-chat")
+        val model = ModelInfo(id = stored.modelId.ifBlank { "deepseek-chat" })
         val messages = listOf(
-            OutMessageDto(role = "system", content = system),
+            OutMessageDto(role = "system", content = kotlinx.serialization.json.JsonPrimitive(system)),
             OutMessageDto(
                 role = "user",
-                content = "群里最近的对话：\n\n" + transcript + "\n\n轮到你说了。",
+                content = kotlinx.serialization.json.JsonPrimitive(
+                    "群里最近的对话：\n\n" + transcript + "\n\n轮到你说了。",
+                ),
             ),
         )
 
