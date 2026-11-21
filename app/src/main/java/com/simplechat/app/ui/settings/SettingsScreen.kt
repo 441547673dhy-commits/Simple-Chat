@@ -667,7 +667,7 @@ fun SettingsScreen(
                                 scope.launch { store.setRepeatGuardLevel(conversationId, next3) }
                             },
                             onCycleFreqPenalty = {
-                                val steps2 = listOf(0.0, 0.2, 0.3, 0.5)
+                                val steps2 = listOf(0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0)
                                 val next2 = steps2[(steps2.indexOf(freqPenalty) + 1) % steps2.size]
                                 freqPenalty = next2
                                 scope.launch { store.setFrequencyPenaltyFor(conversationId, next2) }
