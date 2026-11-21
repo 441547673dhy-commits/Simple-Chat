@@ -30,6 +30,8 @@ data class ChatRequestDto(
     @SerialName("top_p") val topP: Double? = null,
     /** 防复读：同 token 反复出现会被压。只有 OpenAI 兼容通道认，0 = 不带。 */
     @SerialName("frequency_penalty") val frequencyPenalty: Double? = null,
+    /** 工具声明（探测是否支持 function calling 用；正常对话不传）。 */
+    val tools: kotlinx.serialization.json.JsonElement? = null,
     /** 仅用于 KVCache 隔离与内容安全标识，可选。 */
     @SerialName("user_id") val userId: String? = null,
 )
