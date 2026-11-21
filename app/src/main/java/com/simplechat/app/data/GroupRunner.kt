@@ -48,6 +48,9 @@ class GroupRunner(
         val stored = settingsStore.flow.first()
         val order = if (random) members.shuffled() else members
         var spoken = 0
+        // seq 必须接在已有最大值后面：早先用时间戳，跟 1/2/3 混在一起，排序就乱了
+        var nextSeq = (GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
+            .maxOfOrNull { it.seq } ?: 0) + 1
 
         order.forEach { member ->
             progress?.onSpeaking(member.name)
@@ -60,11 +63,15 @@ class GroupRunner(
             if (body.contains("[END]") || body.contains("[QUIT]") || body.contains("[SKIP]")) return@forEach
 
             val line = GroupRules.buildLine(
+                seq = nextSeq,
                 from = member.name,
                 to = to,
                 text = GroupRules.truncate(body, 80),
             )
-            if (settingsStore.appendGroupLine(groupUri, line)) spoken++
+            if (settingsStore.appendGroupLine(groupUri, line)) {
+                spoken++
+                nextSeq++
+            }
         }
         return spoken
     }
@@ -158,9 +165,8 @@ object GroupRules {
     }
 
     /** 造一行 JSONL。 */
-    fun buildLine(from: String, to: String?, text: String): String {
+    fun buildLine(seq: Int, from: String, to: String?, text: String): String {
         val ts = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
-        val seq = (System.currentTimeMillis() / 1000).toInt()
         return "{\"seq\":" + seq + ",\"ts\":\"" + ts + "\",\"from\":" + esc(from) +
             ",\"to\":" + (to?.let { esc(it) } ?: "null") +
             ",\"text\":" + esc(text) + ",\"kind\":\"say\"}"

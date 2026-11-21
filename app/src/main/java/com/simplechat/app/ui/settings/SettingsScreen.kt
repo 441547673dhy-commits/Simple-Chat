@@ -3286,6 +3286,8 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
                         try {
                             runner.runRound(uri, members, randomOrder) { name -> speaking = name }
                             load(uri)
+                            kotlinx.coroutines.delay(300)
+                            load(uri)
                         } finally {
                             running = false
                             speaking = ""
