@@ -273,7 +273,7 @@ fun MessageList(
                 onDismissSearch = onDismissSearch,
                 peeked = peekedId == message.id,
                 selecting = textSelection.messageId == message.id,
-                selectionActive = textSelection.isActive || shareSelection?.active == true,
+                selectionActive = textSelection.isActive || shareSelection?.active == true || bulkMode,
                 sharing = shareSelection?.active == true,
                 onShare = if (onShare != null && sharedGroup?.available == true) ({ onShare(message) }) else null,
                 onSelectingChange = { state ->
