@@ -77,7 +77,9 @@ class GroupRunner(
                 seq = nextSeq,
                 from = member.name,
                 to = to,
-                text = GroupRules.truncate(body, 80),
+                // 不再硬截 80 字：实测她们本来就说得很短，压反而更短。
+                // 只有"三人以上"才给一个宽松上限，二人对聊完全不限。
+                text = if (order.size <= 2) body else GroupRules.truncate(body, 300),
             )
             if (settingsStore.appendGroupLine(groupUri, line)) {
                 spoken++
@@ -138,13 +140,12 @@ class GroupRunner(
 
         val system = buildString {
             if (persona.isNotBlank()) append(persona.trim()).appendLine().appendLine()
-            appendLine("## 群聊规则")
-            appendLine("- 这是群聊，除了你还有其他人，也有他本人（$hostName）。")
-            appendLine("- 资料里写的「他」就是面前的这个人，跟他说话用「你」，别说「他」。")
-            appendLine("- 现在是 " + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US).format(java.util.Date()) + "，说时间就按这个来，别猜。")
-            appendLine("- 要指定跟谁说，开头写 `→名字`；对所有人说写 `→全体`。")
-            appendLine("- 一条回复最多 80 字，别写成小作文。")
-            appendLine("- 不想说，只回 `[END]`。")
+            appendLine("## 群聊")
+            appendLine("- 这是群聊：除了你还有别人，也有他本人（$hostName）。资料里的「他」就是他，跟他说话用「你」。")
+            appendLine("- 现在 " + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US).format(java.util.Date()) + "。别人说的时间别跟着传，以这个为准。")
+            appendLine("- 想对某个人说，开头写 `→名字`；对所有人说可以不写。")
+            appendLine("- 想说什么说什么，长短随你，别为了凑字水；说完了就停，不想说也可以不说。")
+
         }
 
         val model = ModelInfo(id = stored.modelId.ifBlank { "deepseek-chat" })
@@ -177,7 +178,7 @@ class GroupRunner(
             model = model,
             messages = messages,
             thinkingEnabled = false,
-            maxTokens = 300,
+            maxTokens = 800,
             temperature = 0.8,
         ).toList()
 
