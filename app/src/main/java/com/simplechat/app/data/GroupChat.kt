@@ -19,6 +19,8 @@ data class GroupLine(
     val text: String,
     /** say 正常 / end 弃权 / pass 未发言。 */
     val kind: String,
+    /** 她的思考过程（可选，只有引擎开启思考时才有）。 */
+    val think: String? = null,
 )
 
 /**
@@ -57,6 +59,7 @@ object GroupChat {
             to = str("to")?.takeIf { it.isNotBlank() && it != "全体" },
             text = text,
             kind = str("kind") ?: "say",
+            think = str("think"),
         )
     }
 

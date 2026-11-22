@@ -3499,6 +3499,23 @@ private fun GroupLogPage(
                             style = MaterialTheme.typography.labelSmall,
                             color = LocalChatColors.current.placeholder,
                         )
+                        line.think?.takeIf { it.isNotBlank() }?.let { thinkText ->
+                            var expanded by remember(line.seq) { mutableStateOf(false) }
+                            Text(
+                                text = if (expanded) "▾ 思考" else "▸ 思考",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { expanded = !expanded },
+                            )
+                            if (expanded) {
+                                Text(
+                                    text = thinkText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LocalChatColors.current.placeholder,
+                                    modifier = Modifier.padding(vertical = 2.dp),
+                                )
+                            }
+                        }
                         Text(
                             text = line.text,
                             style = MaterialTheme.typography.bodyMedium,

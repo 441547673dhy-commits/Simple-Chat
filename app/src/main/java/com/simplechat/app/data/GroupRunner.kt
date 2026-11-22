@@ -65,11 +65,11 @@ class GroupRunner(
         order.forEach { member ->
             if (shouldStop()) return@forEach
             progress?.onSpeaking(member.name)
-            val reply = runCatching {
+            val (replyText, replyThinking) = runCatching {
                 askOnce(stored, member, groupUri, hostName)
             }.getOrNull() ?: return@forEach
 
-            val (to, body) = GroupRules.parseTarget(reply, fallback = null)
+            val (to, body) = GroupRules.parseTarget(replyText, fallback = null)
             if (body.isBlank()) return@forEach
             if (body.contains("[END]") || body.contains("[QUIT]") || body.contains("[SKIP]")) return@forEach
 
@@ -126,7 +126,7 @@ class GroupRunner(
         member: GroupMember,
         groupUri: String,
         hostName: String,
-    ): String {
+    ): Pair<String, String> {
         val persona = settingsStore.readTextFrom(android.net.Uri.parse(member.injectUri))
         // 她自己的最近对话（按"发送预算"裁）——这是"经历"，比档案更能决定她像不像她
         val recent = member.conversationId?.let { conv ->
@@ -177,14 +177,14 @@ class GroupRunner(
             apiKey = stored.apiKey,
             model = model,
             messages = messages,
-            thinkingEnabled = false,
+            thinkingEnabled = true,
             maxTokens = 800,
             temperature = 0.8,
         ).toList()
 
-        return chunks.filterIsInstance<StreamEvent.Content>()
-            .joinToString("") { it.text }
-            .trim()
+        val text = chunks.filterIsInstance<StreamEvent.Content>().joinToString("") { it.text }.trim()
+        val thinking = chunks.filterIsInstance<StreamEvent.Reasoning>().joinToString("") { it.text }.trim()
+        return text to thinking
     }
 }
 
@@ -241,10 +241,11 @@ object GroupRules {
     }
 
     /** 造一行 JSONL。 */
-    fun buildLine(seq: Int, from: String, to: String?, text: String): String {
+    fun buildLine(seq: Int, from: String, to: String?, text: String, think: String? = null): String {
         val ts = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
         return "{\"seq\":" + seq + ",\"ts\":\"" + ts + "\",\"from\":" + esc(from) +
             ",\"to\":" + (to?.let { esc(it) } ?: "null") +
-            ",\"text\":" + esc(text) + ",\"kind\":\"say\"}"
+            ",\"text\":" + esc(text) +
+            (think?.let { ",\"think\":" + esc(it) } ?: "") + ",\"kind\":\"say\"}"
     }
 }
