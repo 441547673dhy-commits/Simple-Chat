@@ -66,7 +66,7 @@ class GroupRunner(
             if (shouldStop()) return@forEach
             progress?.onSpeaking(member.name)
             val (replyText, replyThinking) = runCatching {
-                askOnce(stored, member, groupUri, hostName)
+                askOnce(stored, member, groupUri, hostName, member.thinking)
             }.getOrNull() ?: return@forEach
 
             val (to, body) = GroupRules.parseTarget(replyText, fallback = null)
@@ -126,6 +126,7 @@ class GroupRunner(
         member: GroupMember,
         groupUri: String,
         hostName: String,
+        wantThinking: Boolean,
     ): Pair<String, String> {
         val persona = settingsStore.readTextFrom(android.net.Uri.parse(member.injectUri))
         // 她自己的最近对话（按"发送预算"裁）——这是"经历"，比档案更能决定她像不像她
@@ -177,7 +178,7 @@ class GroupRunner(
             apiKey = stored.apiKey,
             model = model,
             messages = messages,
-            thinkingEnabled = true,
+            thinkingEnabled = wantThinking,
             maxTokens = 800,
             temperature = 0.8,
         ).toList()

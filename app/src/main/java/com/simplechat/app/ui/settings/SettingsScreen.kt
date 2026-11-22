@@ -3267,6 +3267,7 @@ private fun GroupLogPage(
     var showConversationPicker by remember { mutableStateOf(false) }
     var atTarget by remember { mutableStateOf<String?>(null) }
     var atPickerOpen by remember { mutableStateOf(false) }
+    var showThinkingPicker by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val runner = remember {
@@ -3301,6 +3302,32 @@ private fun GroupLogPage(
     val conversations by remember {
         app.container.chatRepository.observeConversations()
     }.collectAsState(initial = emptyList())
+
+    if (showThinkingPicker) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showThinkingPicker = false },
+            title = { Text("谁要记录思考？") },
+            text = {
+                Column {
+                    members.forEach { m ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(m.name, modifier = Modifier.weight(1f))
+                            androidx.compose.material3.Switch(
+                                checked = m.thinking,
+                                onCheckedChange = { on ->
+                                    members = members.map {
+                                        if (it.name == m.name) it.copy(thinking = on) else it
+                                    }
+                                    scope.launch { store.setGroupMembers(members) }
+                                },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showThinkingPicker = false }) { Text("好") } },
+        )
+    }
 
     if (atPickerOpen) {
         androidx.compose.material3.AlertDialog(
@@ -3411,6 +3438,13 @@ private fun GroupLogPage(
                 onClick = { showConversationPicker = true },
             )
             RowDivider()
+            RowDivider()
+            SettingsActionRow(
+                label = "成员思考",
+                hint = members.joinToString("、") { it.name + if (it.thinking) "(开)" else "(关)" }
+                    .ifBlank { "没有成员" } + " · 点按切换",
+                onClick = { showThinkingPicker = true },
+            )
             RowDivider()
             SettingsActionRow(
                 label = "导出成员表",
