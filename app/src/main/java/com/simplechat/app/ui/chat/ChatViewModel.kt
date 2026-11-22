@@ -2281,6 +2281,7 @@ class ChatViewModel(
 
         // 顺序规则见 `orderedOutgoingMessages`（纯函数，有单测钉死）
         val snapshot = settingsStore.flow.first()
+        val reasonBack = settingsStore.reasonBackFor(currentConversationId)
         val recentOnly = snapshot.recentOnly
         val fullList = orderedOutgoingMessages(messages, active)
         val outgoingList = if (recentOnly) {
@@ -2325,9 +2326,21 @@ class ChatViewModel(
              * 是可能存在的，而部分兼容网关对空 `content` 直接 400 ——
              * 一条空消息不值得让整段历史发不出去（见 `isSendableOutgoing`）。
              */
-            val outgoing = if (message.role == MessageRole.USER && message.attachments.isNotEmpty()) {
+            var outgoing = if (message.role == MessageRole.USER && message.attachments.isNotEmpty()) {
                 message.copy(attachments = outgoingAttachments(message.attachments))
             } else message
+            /*
+             * 会话级「回传思考」：把这条 assistant 当年的思考附在正文前。
+             * 默认关（思考回传容易让她开始演思考）；他开了才这么做。
+             */
+            if (reasonBack && message.role != MessageRole.USER) {
+                val think = message.reasoning?.takeIf { it.isNotBlank() }
+                if (think != null) {
+                    outgoing = outgoing.copy(
+                        content = "（当时想：" + think.take(1200) + "）\n" + outgoing.content,
+                    )
+                }
+            }
             if (!isSendableOutgoing(outgoing)) return@forEach
             request += OutMessageDto(
                 role = if (message.role == MessageRole.USER) "user" else "assistant",

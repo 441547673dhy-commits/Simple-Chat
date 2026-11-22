@@ -400,6 +400,20 @@ class SettingsStore(
         preferences.edit { it[Keys.RECENT_ONLY] = enabled }
     }
 
+    /**
+     * 会话级「回传思考」：把历史上她自己写的思考，随消息一起发回去。
+     *
+     * 默认关 —— 思考回传容易让她开始"表演思考"。他要就开，按会话存。
+     */
+    suspend fun reasonBackFor(conversationId: String?): Boolean =
+        if (conversationId.isNullOrBlank()) false
+        else preferences.data.first()[stringPreferencesKey("reason_back_$conversationId")] == "1"
+
+    suspend fun setReasonBack(conversationId: String?, on: Boolean) {
+        if (conversationId.isNullOrBlank()) return
+        preferences.edit { it[stringPreferencesKey("reason_back_$conversationId")] = if (on) "1" else "0" }
+    }
+
     /** 群聊里把思考也读给成员。见 [StoredSettings.groupShowThinking]。 */
     suspend fun setGroupShowThinking(value: Boolean) {
         preferences.edit { it[Keys.GROUP_SHOW_THINK] = value }

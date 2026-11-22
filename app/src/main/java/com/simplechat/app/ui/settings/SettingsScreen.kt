@@ -256,6 +256,7 @@ fun SettingsScreen(
     }
     var presets by remember { mutableStateOf<List<Preset>>(emptyList()) }
 
+    var reasonBack by remember { mutableStateOf(false) }
     var guardRun by remember { mutableStateOf(0) }
     var guardWord by remember { mutableStateOf(0) }
     var freqPenalty by remember { mutableStateOf(0.0) }
@@ -266,6 +267,7 @@ fun SettingsScreen(
     var personaLogUri by remember { mutableStateOf("") }
     LaunchedEffect(conversationId) {
         personaUri = store.personaFileUriFor(conversationId)
+        reasonBack = store.reasonBackFor(conversationId)
         guardRun = store.guardRunLevelFor(conversationId)
         guardWord = store.guardWordLevelFor(conversationId)
         freqPenalty = store.frequencyPenaltyFor(conversationId)
@@ -1703,6 +1705,17 @@ private fun DataPage(
             label = "同步群聊记录",
             hint = "选群聊 jsonl，把新消息追加进本会话（先预览，确认才写）",
             onClick = onPickGroupChat,
+        )
+        SettingsActionRow(
+            label = "回传思考",
+            hint = if (reasonBack) "开 · 她能看到自己以前怎么想的（按会话）"
+            else "关 · 思考只在本地 · 点按打开（按会话）",
+            onClick = {
+                scope.launch {
+                    store.setReasonBack(conversationId, !store.reasonBackFor(conversationId))
+                    reasonBack = store.reasonBackFor(conversationId)
+                }
+            },
         )
         SettingsActionRow(
             label = "窗口外补段",
