@@ -284,6 +284,7 @@ fun SettingsScreen(
     // ── 群聊记录同步（A 方案）：选文件 → 预览 → 确认写入 ──
     var pendingGroup by remember { mutableStateOf<List<com.simplechat.app.data.GroupLine>?>(null) }
     var pendingAfter by remember { mutableStateOf(0) }
+    var pendingGroupName by remember { mutableStateOf("") }
     val groupPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -291,6 +292,9 @@ fun SettingsScreen(
         scope.launch {
             val raw = store.readTextFrom(uri)
             pendingAfter = store.groupSyncSeqFor(conversationId)
+            pendingGroupName = android.net.Uri.decode(
+                uri.lastPathSegment?.substringAfterLast('/') ?: "",
+            )
             pendingGroup = com.simplechat.app.data.GroupChat.parse(raw)
         }
     }
@@ -325,7 +329,7 @@ fun SettingsScreen(
                     if (conv != null) {
                         scope.launch {
                             val msg = try {
-                                val tag = fileName.substringBeforeLast('.').ifBlank { null }
+                                val tag = pendingGroupName.substringBeforeLast('.').ifBlank { null }
                             val written = repository.appendGroupLines(conv, myName, lines, pendingAfter, tag)
                                 lines.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
                                 com.simplechat.app.data.GroupSyncLog.write(
@@ -3366,7 +3370,13 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
                     stopRequested = false
                     scope.launch {
                         try {
-                            runner.runRound(uri, members, randomOrder, shouldStop = { stopRequested }) { name -> speaking = name }
+                            runner.runRound(
+                                groupUri = uri,
+                                members = members,
+                                random = randomOrder,
+                                progress = { name -> speaking = name },
+                                shouldStop = { stopRequested },
+                            )
                             load(uri)
                             kotlinx.coroutines.delay(300)
                             load(uri)
