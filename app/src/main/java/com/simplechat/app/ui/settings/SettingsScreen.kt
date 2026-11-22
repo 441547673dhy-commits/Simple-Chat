@@ -740,6 +740,34 @@ fun SettingsScreen(
                             onPickGroupChat = {
                                 groupPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
                             },
+                            onTestTools = {
+                                scope.launch {
+                                    val msg = runCatching {
+                                        val src = store.flow.first()
+                                        val probeJson = "[{\"type\":\"function\",\"function\":{\"name\":\"ping\",\"description\":\"probe\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}]"
+                                        val probe = kotlinx.serialization.json.Json.parseToJsonElement(probeJson)
+                                        val events = container.chatApi.streamChat(
+                                            baseUrl = src.baseUrl,
+                                            apiKey = src.apiKey,
+                                            model = com.simplechat.app.net.ModelInfo(id = src.modelId.ifBlank { "deepseek-chat" }),
+                                            messages = listOf(
+                                                com.simplechat.app.net.OutMessageDto(
+                                                    role = "user",
+                                                    content = kotlinx.serialization.json.JsonPrimitive("调用 ping 工具"),
+                                                ),
+                                            ),
+                                            thinkingEnabled = false,
+                                            maxTokens = 50,
+                                            tools = probe,
+                                        ).toList()
+                                        "支持（收到 " + events.size + " 个事件）"
+                                    }.getOrElse { e ->
+                                        "不支持或出错：" + e.javaClass.simpleName + " " + (e.message ?: "").take(120)
+                                    }
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                    com.simplechat.app.data.GroupSyncLog.write(context, null, "tools-probe", 0, 0, 0, msg)
+                                }
+                            },
                             guardWord = guardWord,
                             onCycleWordGuard = {
                                 val n = (guardWord + 1) % 4
@@ -1566,6 +1594,7 @@ private fun DataPage(
     guardWord: Int = 0,
     onCycleWordGuard: () -> Unit = {},
     onPickGroupChat: () -> Unit = {},
+    onTestTools: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
     onUnbindLog: () -> Unit = {},
 ) {
@@ -1745,34 +1774,7 @@ private fun DataPage(
         SettingsActionRow(
             label = "测试 tools 支持",
             hint = "发一个带工具声明的请求，看通道认不认 function calling",
-            onClick = {
-                scope.launch {
-                    val msg = runCatching {
-                        val src = store.flow.first()
-                        val probeJson = "[{\"type\":\"function\",\"function\":{\"name\":\"ping\",\"description\":\"probe\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}]"
-                        val probe = kotlinx.serialization.json.Json.parseToJsonElement(probeJson)
-                        val events = container.chatApi.streamChat(
-                            baseUrl = src.baseUrl,
-                            apiKey = src.apiKey,
-                            model = com.simplechat.app.net.ModelInfo(id = src.modelId.ifBlank { "deepseek-chat" }),
-                            messages = listOf(
-                                com.simplechat.app.net.OutMessageDto(
-                                    role = "user",
-                                    content = kotlinx.serialization.json.JsonPrimitive("调用 ping 工具"),
-                                ),
-                            ),
-                            thinkingEnabled = false,
-                            maxTokens = 50,
-                            tools = probe,
-                        ).toList()
-                        "支持（收到 " + events.size + " 个事件）"
-                    }.getOrElse { e ->
-                        "不支持或出错：" + e.javaClass.simpleName + " " + (e.message ?: "").take(120)
-                    }
-                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                    com.simplechat.app.data.GroupSyncLog.write(context, null, "tools-probe", 0, 0, 0, msg)
-                }
-            },
+            onClick = onTestTools,
         )
         RowDivider()
         SettingsActionRow(
