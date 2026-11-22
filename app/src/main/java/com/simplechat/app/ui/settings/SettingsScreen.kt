@@ -751,6 +751,13 @@ fun SettingsScreen(
                             onPickGroupChat = {
                                 groupPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
                             },
+                            reasonBack = reasonBack,
+                            onToggleReasonBack = {
+                                scope.launch {
+                                    store.setReasonBack(conversationId, !store.reasonBackFor(conversationId))
+                                    reasonBack = store.reasonBackFor(conversationId)
+                                }
+                            },
                             contextTail = stored.contextTailChars,
                             onCycleContextTail = {
                                 val steps = listOf(0, 10_000, 20_000, 30_000, 50_000, 80_000, 120_000)
@@ -1624,6 +1631,8 @@ private fun DataPage(
     onCycleWordGuard: () -> Unit = {},
     onPickGroupChat: () -> Unit = {},
     onTestTools: () -> Unit = {},
+    reasonBack: Boolean = false,
+    onToggleReasonBack: () -> Unit = {},
     contextTail: Int = 30_000,
     onCycleContextTail: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
@@ -1710,12 +1719,7 @@ private fun DataPage(
             label = "回传思考",
             hint = if (reasonBack) "开 · 她能看到自己以前怎么想的（按会话）"
             else "关 · 思考只在本地 · 点按打开（按会话）",
-            onClick = {
-                scope.launch {
-                    store.setReasonBack(conversationId, !store.reasonBackFor(conversationId))
-                    reasonBack = store.reasonBackFor(conversationId)
-                }
-            },
+            onClick = onToggleReasonBack,
         )
         SettingsActionRow(
             label = "窗口外补段",
