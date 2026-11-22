@@ -22,6 +22,7 @@ class GroupRunner(
     private val chatApi: ChatApi,
     private val settingsStore: SettingsStore,
     private val repository: ChatRepository,
+    private val appContext: android.content.Context,
 ) {
 
     /** 一轮的进度回调（给界面显示"谁在说话"）。 */
@@ -132,6 +133,9 @@ class GroupRunner(
     ): Pair<String, String> {
         val persona = settingsStore.readTextFrom(android.net.Uri.parse(member.injectUri))
         // 她自己的最近对话（按"发送预算"裁）——这是"经历"，比档案更能决定她像不像她
+        val images = member.conversationId?.let { conv ->
+            runCatching { repository.recentImageDataUrls(conv, 1, appContext) }.getOrDefault(emptyList())
+        } ?: emptyList()
         val recent = member.conversationId?.let { conv ->
             val budget = stored.groupBudgetChars
             runCatching { repository.transcriptOf(conv, if (budget <= 0) Int.MAX_VALUE else budget) }
@@ -156,22 +160,34 @@ class GroupRunner(
             OutMessageDto(role = "system", content = kotlinx.serialization.json.JsonPrimitive(system)),
             OutMessageDto(
                 role = "user",
-                content = kotlinx.serialization.json.JsonPrimitive(
-                    buildString {
+                content = run {
+                    val text = buildString {
                         if (recent.isNotEmpty()) {
                             appendLine("你们之前的对话（最近的）：")
-                            recent.forEach { (role, text) ->
-                                appendLine((if (role == "user") "他：" else "你：") + text.take(2000))
+                            recent.forEach { (role, body) ->
+                                appendLine((if (role == "user") "他：" else "你：") + body.take(2000))
                             }
                             appendLine()
+                        }
+                        if (images.isNotEmpty()) {
+                            appendLine("（附了一张他最近发的图，是他给你看的。）")
                         }
                         appendLine("群里最近的对话：")
                         append(transcript)
                         appendLine()
                         appendLine()
                         append("轮到你说了。")
-                    },
-                ),
+                    }
+                    // 有图就走多模态（图片只允许放在 user 消息里）
+                    if (images.isEmpty()) {
+                        kotlinx.serialization.json.JsonPrimitive(text)
+                    } else {
+                        com.simplechat.app.net.MessageContent.withImages(
+                            text,
+                            images.map { com.simplechat.app.net.ImageInput(it, "high") },
+                        )
+                    }
+                },
             ),
         )
 

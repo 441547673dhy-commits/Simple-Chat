@@ -677,6 +677,37 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
     }
 
     /**
+     * 取某个会话最近的**图片**（data URL 形式），最多 [limit] 张。
+     *
+     * 群聊引擎用：让群里发言的成员"看到"他最近发的图。
+     * 落盘的要先物化（读回 base64），所以需要 Context。
+     */
+    suspend fun recentImageDataUrls(
+        conversationId: String,
+        limit: Int,
+        context: android.content.Context,
+    ): List<String> {
+        if (limit <= 0) return emptyList()
+        val rows = messages.recentAttachmentRows(conversationId, limit)
+        val out = ArrayList<String>()
+        rows.forEach { bytes ->
+            if (out.size >= limit) return@forEach
+            val raw = bytes ?: return@forEach
+            val list = runCatching {
+                kotlinx.serialization.json.Json.decodeFromString<List<Attachment>>(String(raw))
+            }.getOrDefault(emptyList())
+            list.firstOrNull { it.isImage }?.let { img ->
+                val full = AttachmentFiles.materialize(context, img)
+                if (full.data.isNotBlank()) {
+                    val mime = full.mime.ifBlank { "image/jpeg" }
+                    out += "data:$mime;base64," + full.data
+                }
+            }
+        }
+        return out
+    }
+
+    /**
      * 读某个会话**当前分支**的对话（群聊引擎用），从后往前截到 [maxChars] 字符。
      *
      * @return 按时间顺序的 (role, content)，role 是 user / assistant。

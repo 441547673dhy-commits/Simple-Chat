@@ -3295,7 +3295,9 @@ private fun GroupLogPage(
     val context = androidx.compose.ui.platform.LocalContext.current
     val runner = remember {
         val app = context.applicationContext as App
-        com.simplechat.app.data.GroupRunner(app.container.chatApi, store, app.container.chatRepository)
+        com.simplechat.app.data.GroupRunner(
+            app.container.chatApi, store, app.container.chatRepository, app.applicationContext,
+        )
     }
 
     LaunchedEffect(Unit) {

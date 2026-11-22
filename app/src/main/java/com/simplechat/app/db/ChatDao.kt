@@ -262,6 +262,17 @@ interface MessageDao {
     @Query("SELECT id, parentId, role, content, createdAt FROM messages WHERE conversationId = :conversationId")
     suspend fun textRowsFor(conversationId: String): List<MessageTextRow>
 
+    /**
+     * 取某个会话**最近 N 条带附件的消息**的 attachments 列（群聊引擎"看图"用）。
+     *
+     * 图片多为落盘形态，列里只有元数据，不取正文，内存可控。
+     */
+    @Query(
+        "SELECT attachments FROM messages WHERE conversationId = :conversationId " +
+            "AND attachmentsPresent = 1 ORDER BY createdAt DESC LIMIT :limit",
+    )
+    suspend fun recentAttachmentRows(conversationId: String, limit: Int): List<ByteArray?>
+
     /** 按 id 批量取整条消息（活跃路径上的那些）。 */
     @Query("SELECT * FROM messages WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<String>): List<MessageEntity>
