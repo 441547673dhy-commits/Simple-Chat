@@ -269,7 +269,7 @@ interface MessageDao {
      */
     @Query(
         "SELECT attachments FROM messages WHERE conversationId = :conversationId " +
-            "AND attachmentsPresent = 1 ORDER BY createdAt DESC LIMIT :limit",
+            "AND attachments IS NOT NULL AND attachments != '' ORDER BY createdAt DESC LIMIT :limit",
     )
     suspend fun recentAttachmentRows(conversationId: String, limit: Int): List<ByteArray?>
 
