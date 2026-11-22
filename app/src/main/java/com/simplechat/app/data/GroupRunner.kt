@@ -43,6 +43,8 @@ class GroupRunner(
         random: Boolean,
         hostName: String = "大馋鬼",
         progress: Progress? = null,
+        /** 返回 true 时不再继续下一个成员（当前这条会写完）。 */
+        shouldStop: () -> Boolean = { false },
     ): Int {
         if (members.isEmpty()) return 0
         val stored = settingsStore.flow.first()
@@ -53,6 +55,7 @@ class GroupRunner(
             .maxOfOrNull { it.seq } ?: 0) + 1
 
         order.forEach { member ->
+            if (shouldStop()) return@forEach
             progress?.onSpeaking(member.name)
             val reply = runCatching {
                 askOnce(stored, member, groupUri, hostName)

@@ -79,5 +79,10 @@ object GroupChat {
 
     /** 跳过弃权与空话——它们不该变成一条消息。 */
     fun isSpeakable(line: GroupLine): Boolean =
-        line.kind == "say" && line.text.isNotBlank() && !line.text.contains("[END]")
+        line.kind == "say" &&
+            line.text.isNotBlank() &&
+            // 三个"不发言"的记号：END 弃权 / QUIT 退场 / SKIP 不想谈这个
+            !line.text.contains("[END]") &&
+            !line.text.contains("[QUIT]") &&
+            !line.text.contains("[SKIP]")
 }

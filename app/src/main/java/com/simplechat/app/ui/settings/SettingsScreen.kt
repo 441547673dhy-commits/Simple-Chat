@@ -325,7 +325,8 @@ fun SettingsScreen(
                     if (conv != null) {
                         scope.launch {
                             val msg = try {
-                                val written = repository.appendGroupLines(conv, myName, lines, pendingAfter)
+                                val tag = fileName.substringBeforeLast('.').ifBlank { null }
+                            val written = repository.appendGroupLines(conv, myName, lines, pendingAfter, tag)
                                 lines.maxOfOrNull { it.seq }?.let { store.setGroupSyncSeq(conv, it) }
                                 com.simplechat.app.data.GroupSyncLog.write(
                                     context, conv, myName, parsed.size, lines.size, pendingAfter,
@@ -3232,6 +3233,7 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
     var randomOrder by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(false) }
     var speaking by remember { mutableStateOf("") }
+    var stopRequested by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val runner = remember {
@@ -3357,13 +3359,14 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
                 hint = if (running) "跑完会自动刷新；点按可请求停止（当前那条会发完）"
                 else "让群里每个成员各说一句（每人一次请求）",
                 onClick = {
-                    if (running) return@SettingsActionRow
+                    if (running) { stopRequested = true; return@SettingsActionRow }
                     val uri = uriString
                     if (uri.isBlank() || members.isEmpty()) return@SettingsActionRow
                     running = true
+                    stopRequested = false
                     scope.launch {
                         try {
-                            runner.runRound(uri, members, randomOrder) { name -> speaking = name }
+                            runner.runRound(uri, members, randomOrder, shouldStop = { stopRequested }) { name -> speaking = name }
                             load(uri)
                             kotlinx.coroutines.delay(300)
                             load(uri)
