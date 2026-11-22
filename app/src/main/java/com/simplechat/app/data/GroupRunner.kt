@@ -191,13 +191,21 @@ class GroupRunner(
 object GroupRules {
 
     // 允许 `→名字 正文` 和 `→名字：正文`（实测她爱加冒号，原来解析不到）
-    private val target = Regex("^\\s*(?:→|->)\\s*([^\\s：:，,。]+)\\s*[：:]?\\s*")
+    private val target = Regex("(?:→|->)\\s*([^\\s：:，,。]+)\\s*[：:]?\\s*")
 
-    /** 解析 `→名字 正文`；没有箭头返回 (fallback, 原文)。 */
+    /**
+     * 解析 `→名字` 指定收件人。
+     *
+     * 箭头**可能出现在句中**（实测她们爱写"测试到此为止。→大馋鬼 五点了"），
+     * 所以取**第一个**箭头，从正文里删掉那一段，并把名字当收件人。
+     * 没有箭头就用 [fallback]（一般是"上一条的发送者"）。
+     */
     fun parseTarget(text: String, fallback: String?): Pair<String?, String> {
         val m = target.find(text) ?: return fallback to text.trim()
         val name = m.groupValues[1].trim('：', ':', '，', ',', '。')
-        val body = text.substring(m.range.last + 1).trim()
+        val body = (text.substring(0, m.range.first) + " " + text.substring(m.range.last + 1))
+            .replace(Regex("\\s+"), " ")
+            .trim()
         return if (name in setOf("全体", "大家", "所有人")) null to body else name to body
     }
 
