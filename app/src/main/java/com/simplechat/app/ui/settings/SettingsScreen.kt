@@ -298,10 +298,13 @@ fun SettingsScreen(
     // 预览对话框：改用 Compose 的 AlertDialog（状态驱动）。
     // 原生 Builder 在 Compose 里会时灵时不灵（2026-11-22 实测）。
     pendingGroup?.let { parsed ->
+        val myName = personaDisplayName(personaUri).substringBefore("-")
         val speakable = parsed
             .filter { com.simplechat.app.data.GroupChat.isSpeakable(it) }
             .filter { it.seq !in 1..pendingAfter }
-        val myName = personaDisplayName(personaUri).substringBefore("-")
+            // 跳过她自己说的：那句本来就在她会话里（就是从那儿说出去的），
+            // 再同步回来等于两遍（2026-11-22 定）
+            .filter { it.from != myName }
         val mine = speakable.count { it.from == myName }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { pendingGroup = null },
@@ -3240,6 +3243,24 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
         store.groupMembers.firstOrNull()?.let { members = it }
     }
 
+    val importPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val raw = store.readTextFrom(uri)
+            val incoming = com.simplechat.app.data.GroupMembers.decode(raw)
+            if (incoming.isEmpty()) {
+                android.widget.Toast.makeText(context, "没读到成员", android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val merged = (members + incoming).distinctBy { it.name }
+            members = merged
+            store.setGroupMembers(merged)
+            android.widget.Toast.makeText(context, "已导入 " + incoming.size + " 个", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     val memberPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -3266,7 +3287,7 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
     LaunchedEffect(Unit) {
         store.groupFileUri.firstOrNull()?.takeIf { it.isNotBlank() }?.let { saved ->
             uriString = saved
-            fileName = saved.substringAfterLast('/').substringAfterLast("%2F")
+            fileName = android.net.Uri.decode(saved.substringAfterLast('/').substringAfterLast("%2F"))
             load(saved)
         }
     }
@@ -3282,7 +3303,7 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
             )
         }
         uriString = uri.toString()
-        fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "已选择"
+        fileName = android.net.Uri.decode(uri.lastPathSegment?.substringAfterLast('/') ?: "已选择")
         scope.launch {
             store.setGroupFileUri(uri.toString())
             load(uri.toString())
@@ -3303,6 +3324,26 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
                 label = "群成员（" + members.size + "）",
                 hint = members.joinToString("、") { it.name }.ifBlank { "还没加人 · 点按添加（选她的上下文文件）" },
                 onClick = { memberPicker.launch(arrayOf("text/*", "application/octet-stream")) },
+            )
+            RowDivider()
+            RowDivider()
+            SettingsActionRow(
+                label = "导出成员表",
+                hint = "存到 下载/DSH-Go/群成员.json（重装 App 后可导回）",
+                onClick = {
+                    com.simplechat.app.data.GroupSyncLog.writeTextFile(
+                        context,
+                        "群成员-" + java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+                            .format(java.util.Date()) + ".json",
+                        com.simplechat.app.data.GroupMembers.encode(members),
+                    )
+                    android.widget.Toast.makeText(context, "已导出", android.widget.Toast.LENGTH_SHORT).show()
+                },
+            )
+            SettingsActionRow(
+                label = "导入成员表",
+                hint = "选之前导出的 群成员-*.json，把成员加回来",
+                onClick = { importPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
             )
             RowDivider()
             SettingsActionRow(

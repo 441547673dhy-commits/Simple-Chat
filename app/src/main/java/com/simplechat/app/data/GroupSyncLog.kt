@@ -18,6 +18,21 @@ import java.util.Locale
  */
 object GroupSyncLog {
 
+    /** 把任意文本写到 下载/DSH-Go/（成员表这类"要能搬走的配置"用）。 */
+    fun writeTextFile(context: Context, fileName: String, content: String) {
+        runCatching {
+            val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/DSH-Go")
+            }
+            val target = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: return@runCatching
+            resolver.openOutputStream(target, "w")?.use { it.write(content.toByteArray()) }
+        }
+    }
+
     fun write(
         context: Context,
         conversationId: String?,
