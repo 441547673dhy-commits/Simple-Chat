@@ -90,7 +90,8 @@ class GroupRunner(
         val persona = settingsStore.readTextFrom(android.net.Uri.parse(member.injectUri))
         // 她自己的最近对话（按"发送预算"裁）——这是"经历"，比档案更能决定她像不像她
         val recent = member.conversationId?.let { conv ->
-            runCatching { repository.transcriptOf(conv, stored.recentBudgetChars.takeIf { it > 0 } ?: 120_000) }
+            val budget = stored.groupBudgetChars
+            runCatching { repository.transcriptOf(conv, if (budget <= 0) Int.MAX_VALUE else budget) }
                 .getOrDefault(emptyList())
         } ?: emptyList()
         val history = GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))

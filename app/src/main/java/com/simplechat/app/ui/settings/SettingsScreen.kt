@@ -800,7 +800,15 @@ fun SettingsScreen(
                             },
                         )
 
-                        SettingsPage.GROUP -> GroupLogPage(store = store)
+                        SettingsPage.GROUP -> GroupLogPage(
+                            store = store,
+                            groupBudget = stored.groupBudgetChars,
+                            onCycleGroupBudget = {
+                                val steps = listOf(20_000, 40_000, 80_000, 120_000, 200_000, 400_000, 800_000, 0)
+                                val next = steps[(steps.indexOf(stored.groupBudgetChars).takeIf { it >= 0 }?.plus(1) ?: 0) % steps.size]
+                                scope.launch { store.setGroupBudgetChars(next) }
+                            },
+                        )
 
                         SettingsPage.API -> ApiPage(
                             stored = stored,
@@ -3228,7 +3236,11 @@ internal fun personaDisplayName(uri: String): String {
  * 她们的话由「抽发言」写进来，这里只负责**看和说**。
  */
 @Composable
-private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
+private fun GroupLogPage(
+    store: com.simplechat.app.data.SettingsStore,
+    groupBudget: Int,
+    onCycleGroupBudget: () -> Unit,
+) {
     var lines by remember { mutableStateOf<List<com.simplechat.app.data.GroupLine>>(emptyList()) }
     var fileName by remember { mutableStateOf("") }
     var uriString by remember { mutableStateOf("") }
@@ -3384,6 +3396,14 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
                 label = "导入成员表",
                 hint = "选之前导出的 群成员-*.json，把成员加回来",
                 onClick = { importPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+            )
+            RowDivider()
+            RowDivider()
+            SettingsActionRow(
+                label = "群聊预算",
+                hint = if (groupBudget <= 0) "不限（按窗口上限）· 点按切换"
+                else (groupBudget / 10_000).toString() + " 万字符 · 点按切换（她读多少最近对话）",
+                onClick = onCycleGroupBudget,
             )
             RowDivider()
             SettingsActionRow(

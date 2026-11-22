@@ -183,6 +183,9 @@ data class StoredSettings(
      */
     val frequencyPenalty: Double = 0.0,
 
+    /** 群聊引擎读"最近对话"的字符预算。0 = 不限。与聊天页的发送预算分开。 */
+    val groupBudgetChars: Int = 120_000,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -254,6 +257,7 @@ class SettingsStore(
             recentOnly = prefs[Keys.RECENT_ONLY] ?: false,
             recentBudgetChars = prefs[Keys.RECENT_BUDGET] ?: 400_000,
             frequencyPenalty = prefs[Keys.FREQ_PENALTY] ?: 0.0,
+            groupBudgetChars = prefs[Keys.GROUP_BUDGET] ?: 120_000,
 
         )
     }
@@ -376,6 +380,11 @@ class SettingsStore(
     /** 是否只发送最近一段历史。 */
     suspend fun setRecentOnly(enabled: Boolean) {
         preferences.edit { it[Keys.RECENT_ONLY] = enabled }
+    }
+
+    /** 群聊预算。见 [StoredSettings.groupBudgetChars]。 */
+    suspend fun setGroupBudgetChars(value: Int) {
+        preferences.edit { it[Keys.GROUP_BUDGET] = value.coerceAtLeast(0) }
     }
 
     /** 防复读强度。见 [StoredSettings.frequencyPenalty]。 */
@@ -815,6 +824,7 @@ class SettingsStore(
         val RECENT_ONLY = booleanPreferencesKey("recent_only")
         val RECENT_BUDGET = intPreferencesKey("recent_budget_chars")
         val FREQ_PENALTY = doublePreferencesKey("frequency_penalty")
+        val GROUP_BUDGET = intPreferencesKey("group_budget_chars")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")
 
