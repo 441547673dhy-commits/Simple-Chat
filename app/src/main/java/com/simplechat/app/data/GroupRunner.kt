@@ -49,7 +49,14 @@ class GroupRunner(
     ): Int {
         if (members.isEmpty()) return 0
         val stored = settingsStore.flow.first()
-        val order = if (random) members.shuffled() else members
+        // 被点名的人先说：他 @ 了谁，谁排第一
+        val parsedLog = GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
+        val calledName = parsedLog.lastOrNull()?.to
+        val base = if (random) members.shuffled() else members
+        val order = when {
+            calledName == null -> base
+            else -> base.sortedBy { if (it.name == calledName) 0 else 1 }
+        }
         var spoken = 0
         // seq 必须接在已有最大值后面：早先用时间戳，跟 1/2/3 混在一起，排序就乱了
         var nextSeq = (GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
@@ -77,7 +84,38 @@ class GroupRunner(
                 nextSeq++
             }
         }
+        // 跑完把这轮的群聊同步进每个成员的会话 —— 这是"亲身经历"而不是"旁观"
+        syncIntoConversations(groupUri, members, hostName)
         return spoken
+    }
+
+    /**
+     * 把群聊记录同步进成员各自的会话。
+     *
+     * 用**每个会话自己的游标**，所以不会重复写；她自己说过的话跳过
+     * （那句话本来就在她会话里）。
+     */
+    private suspend fun syncIntoConversations(
+        groupUri: String,
+        members: List<GroupMember>,
+        hostName: String,
+    ) {
+        val parsed = GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
+        val tag = android.net.Uri.decode(groupUri.substringAfterLast('/'))
+            .substringBeforeLast('.').ifBlank { null }
+        members.forEach { m ->
+            val conv = m.conversationId ?: return@forEach
+            val after = settingsStore.groupSyncSeqFor(conv)
+            val lines = parsed
+                .filter { GroupChat.isSpeakable(it) }
+                .filter { it.seq > after }
+                .filter { it.from != m.name }
+            if (lines.isEmpty()) return@forEach
+            runCatching {
+                repository.appendGroupLines(conv, m.name, lines, after, tag)
+                lines.maxOfOrNull { it.seq }?.let { settingsStore.setGroupSyncSeq(conv, it) }
+            }
+        }
     }
 
     /** 对她发一次请求，拿回她说的那句。 */
@@ -173,6 +211,9 @@ object GroupRules {
             val to = line.to?.let { "→$it" } ?: ""
             "$who$to：${line.text}"
         }
+
+    /** 公开给界面用（他发言时写 to 字段）。 */
+    fun escPublic(s: String): String = esc(s)
 
     /** JSON 字符串转义（只处理群聊会出现的字符）。 */
     private fun esc(s: String): String = buildString {

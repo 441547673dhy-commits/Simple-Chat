@@ -3251,6 +3251,8 @@ private fun GroupLogPage(
     var speaking by remember { mutableStateOf("") }
     var stopRequested by remember { mutableStateOf(false) }
     var showConversationPicker by remember { mutableStateOf(false) }
+    var atTarget by remember { mutableStateOf<String?>(null) }
+    var atPickerOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val runner = remember {
@@ -3285,6 +3287,23 @@ private fun GroupLogPage(
     val conversations by remember {
         app.container.chatRepository.observeConversations()
     }.collectAsState(initial = emptyList())
+
+    if (atPickerOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { atPickerOpen = false },
+            title = { Text("对谁说？") },
+            text = {
+                Column {
+                    TextButton(onClick = { atTarget = null; atPickerOpen = false }) { Text("全体") }
+                    members.forEach { m ->
+                        TextButton(onClick = { atTarget = m.name; atPickerOpen = false }) { Text(m.name) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { atPickerOpen = false }) { Text("取消") } },
+        )
+    }
 
     if (showConversationPicker) {
         androidx.compose.material3.AlertDialog(
@@ -3481,10 +3500,20 @@ private fun GroupLogPage(
                 }
             }
 
+            if (atTarget != null) {
+                Text(
+                    text = "@" + atTarget + "  ·  点右侧 × 取消",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(start = Space.Screen, bottom = 2.dp),
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Space.Screen, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                TextButton(onClick = {
+                    if (atTarget != null) atTarget = null else atPickerOpen = true
+                }) { Text(if (atTarget != null) "×" else "@") }
                 androidx.compose.material3.OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it },
@@ -3500,11 +3529,13 @@ private fun GroupLogPage(
                         draft = ""
                         scope.launch {
                             val seq = (lines.maxOfOrNull { it.seq } ?: 0) + 1
+                            val toPart = atTarget?.let { com.simplechat.app.data.GroupRules.escPublic(it) } ?: "null"
                             val line = "{\"seq\":" + seq +
                                 ",\"ts\":\"" + java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date()) +
                                 "\",\"from\":\"大馋鬼\",\"to\":null,\"text\":" +
                                 org.json.JSONObject.quote(text) + ",\"kind\":\"say\"}"
                             store.appendGroupLine(uriString, line)
+                            atTarget = null
                             load(uriString)
                         }
                     },
