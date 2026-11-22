@@ -809,6 +809,10 @@ fun SettingsScreen(
                         SettingsPage.GROUP -> GroupLogPage(
                             store = store,
                             groupBudget = stored.groupBudgetChars,
+                            showThinkingToMembers = stored.groupShowThinking,
+                            onToggleShowThinking = {
+                                scope.launch { store.setGroupShowThinking(!stored.groupShowThinking) }
+                            },
                             onCycleGroupBudget = {
                                 val steps = listOf(20_000, 40_000, 80_000, 120_000, 200_000, 400_000, 800_000, 0)
                                 val next = steps[(steps.indexOf(stored.groupBudgetChars).takeIf { it >= 0 }?.plus(1) ?: 0) % steps.size]
@@ -3254,6 +3258,8 @@ private fun GroupLogPage(
     store: com.simplechat.app.data.SettingsStore,
     groupBudget: Int,
     onCycleGroupBudget: () -> Unit,
+    showThinkingToMembers: Boolean = false,
+    onToggleShowThinking: () -> Unit = {},
 ) {
     var lines by remember { mutableStateOf<List<com.simplechat.app.data.GroupLine>>(emptyList()) }
     var fileName by remember { mutableStateOf("") }
@@ -3438,6 +3444,13 @@ private fun GroupLogPage(
                 onClick = { showConversationPicker = true },
             )
             RowDivider()
+            RowDivider()
+            SettingsActionRow(
+                label = "思考共享",
+                hint = if (showThinkingToMembers) "开 · 她们能读到彼此（和自己）的思考"
+                else "关 · 思考只有你看 · 点按打开",
+                onClick = onToggleShowThinking,
+            )
             RowDivider()
             SettingsActionRow(
                 label = "成员思考",

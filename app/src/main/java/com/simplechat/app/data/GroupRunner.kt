@@ -49,6 +49,7 @@ class GroupRunner(
     ): Int {
         if (members.isEmpty()) return 0
         val stored = settingsStore.flow.first()
+        val showThinking = stored.groupShowThinking
         // 被点名的人先说：他 @ 了谁，谁排第一
         val parsedLog = GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
         val calledName = parsedLog.lastOrNull()?.to
@@ -66,7 +67,7 @@ class GroupRunner(
             if (shouldStop()) return@forEach
             progress?.onSpeaking(member.name)
             val (replyText, replyThinking) = runCatching {
-                askOnce(stored, member, groupUri, hostName, member.thinking)
+                askOnce(stored, member, groupUri, hostName, member.thinking, showThinking)
             }.getOrNull() ?: return@forEach
 
             val (to, body) = GroupRules.parseTarget(replyText, fallback = null)
@@ -127,6 +128,7 @@ class GroupRunner(
         groupUri: String,
         hostName: String,
         wantThinking: Boolean,
+        includeThinking: Boolean,
     ): Pair<String, String> {
         val persona = settingsStore.readTextFrom(android.net.Uri.parse(member.injectUri))
         // 她自己的最近对话（按"发送预算"裁）——这是"经历"，比档案更能决定她像不像她
@@ -137,7 +139,7 @@ class GroupRunner(
         } ?: emptyList()
         val history = GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
             .takeLast(30)
-        val transcript = GroupRules.renderTranscript(history, member.name)
+        val transcript = GroupRules.renderTranscript(history, member.name, includeThinking)
 
         val system = buildString {
             if (persona.isNotBlank()) append(persona.trim()).appendLine().appendLine()
@@ -215,12 +217,18 @@ object GroupRules {
         if (text.length <= max) text else text.take(max - 1) + "…"
 
     /** 把记录渲染成她能读的一段（她自己说的标「你」）。 */
-    fun renderTranscript(lines: List<GroupLine>, selfName: String): String =
-        lines.joinToString("\n") { line ->
-            val who = if (line.from == selfName) "你" else line.from
-            val to = line.to?.let { "→$it" } ?: ""
-            "$who$to：${line.text}"
-        }
+    fun renderTranscript(
+        lines: List<GroupLine>,
+        selfName: String,
+        includeThinking: Boolean = false,
+    ): String = lines.joinToString("\n") { line ->
+        val who = if (line.from == selfName) "你" else line.from
+        val to = line.to?.let { "→$it" } ?: ""
+        val think = if (includeThinking && !line.think.isNullOrBlank()) {
+            "（想：" + line.think.take(300) + "）"
+        } else ""
+        "$who$to$think：${line.text}"
+    }
 
     /** 公开给界面用（他发言时写 to 字段）。 */
     fun escPublic(s: String): String = esc(s)

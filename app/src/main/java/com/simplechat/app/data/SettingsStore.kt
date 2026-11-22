@@ -194,6 +194,14 @@ data class StoredSettings(
      */
     val contextTailChars: Int = 30_000,
 
+    /**
+     * 群聊里是否把【思考过程】也读给成员看（含她们自己的）。
+     *
+     * 默认关：思考一旦回传，容易开始"表演思考"。
+     * 他要的时候能开——这是他的选择，不是我的判断。
+     */
+    val groupShowThinking: Boolean = false,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -267,6 +275,7 @@ class SettingsStore(
             frequencyPenalty = prefs[Keys.FREQ_PENALTY] ?: 0.0,
             groupBudgetChars = prefs[Keys.GROUP_BUDGET] ?: 120_000,
             contextTailChars = prefs[Keys.CONTEXT_TAIL] ?: 30_000,
+            groupShowThinking = prefs[Keys.GROUP_SHOW_THINK] ?: false,
 
         )
     }
@@ -389,6 +398,11 @@ class SettingsStore(
     /** 是否只发送最近一段历史。 */
     suspend fun setRecentOnly(enabled: Boolean) {
         preferences.edit { it[Keys.RECENT_ONLY] = enabled }
+    }
+
+    /** 群聊里把思考也读给成员。见 [StoredSettings.groupShowThinking]。 */
+    suspend fun setGroupShowThinking(value: Boolean) {
+        preferences.edit { it[Keys.GROUP_SHOW_THINK] = value }
     }
 
     /** 窗口外补段。见 [StoredSettings.contextTailChars]。 */
@@ -840,6 +854,7 @@ class SettingsStore(
         val FREQ_PENALTY = doublePreferencesKey("frequency_penalty")
         val GROUP_BUDGET = intPreferencesKey("group_budget_chars")
         val CONTEXT_TAIL = intPreferencesKey("context_tail_chars")
+        val GROUP_SHOW_THINK = booleanPreferencesKey("group_show_thinking")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")
 
