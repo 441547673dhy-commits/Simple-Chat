@@ -3238,11 +3238,12 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
     var running by remember { mutableStateOf(false) }
     var speaking by remember { mutableStateOf("") }
     var stopRequested by remember { mutableStateOf(false) }
+    var showConversationPicker by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val runner = remember {
         val app = context.applicationContext as App
-        com.simplechat.app.data.GroupRunner(app.container.chatApi, store)
+        com.simplechat.app.data.GroupRunner(app.container.chatApi, store, app.container.chatRepository)
     }
 
     LaunchedEffect(Unit) {
@@ -3265,6 +3266,38 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
             store.setGroupMembers(merged)
             android.widget.Toast.makeText(context, "已导入 " + incoming.size + " 个", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // 从会话添加成员：会话 = 谁，绑定文件 = 她的档案，会话 id = 读历史的入口
+    val app = context.applicationContext as App
+    val conversations by remember {
+        app.container.chatRepository.observeConversations()
+    }.collectAsState(initial = emptyList())
+
+    if (showConversationPicker) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showConversationPicker = false },
+            title = { Text("选一个会话当成员") },
+            text = {
+                LazyColumn(modifier = Modifier.height(320.dp)) {
+                    items(conversations.size) { i ->
+                        val c = conversations[i]
+                        TextButton(onClick = {
+                            showConversationPicker = false
+                            scope.launch {
+                                val inject = store.personaFileUriFor(c.id)
+                                val name = c.title.take(12).ifBlank { "成员" }
+                                members = members.filter { it.name != name } +
+                                    com.simplechat.app.data.GroupMember(name, inject, c.id)
+                                store.setGroupMembers(members)
+                            }
+                        }) { Text(c.title.ifBlank { c.id.take(8) }) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showConversationPicker = false }) { Text("取消") } },
+        )
     }
 
     val memberPicker = rememberLauncherForActivityResult(
@@ -3329,8 +3362,8 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
             RowDivider()
             SettingsActionRow(
                 label = "群成员（" + members.size + "）",
-                hint = members.joinToString("、") { it.name }.ifBlank { "还没加人 · 点按添加（选她的上下文文件）" },
-                onClick = { memberPicker.launch(arrayOf("text/*", "application/octet-stream")) },
+                hint = members.joinToString("、") { it.name }.ifBlank { "还没加人 · 点按从会话里选" },
+                onClick = { showConversationPicker = true },
             )
             RowDivider()
             RowDivider()

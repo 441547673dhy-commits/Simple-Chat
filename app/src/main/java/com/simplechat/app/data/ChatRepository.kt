@@ -676,6 +676,36 @@ class ChatRepository(private val db: AppDatabase, private val context: Context) 
         1
     }
 
+    /**
+     * 读某个会话**当前分支**的对话（群聊引擎用），从后往前截到 [maxChars] 字符。
+     *
+     * @return 按时间顺序的 (role, content)，role 是 user / assistant。
+     */
+    suspend fun transcriptOf(conversationId: String, maxChars: Int): List<Pair<String, String>> {
+        val rows = messages.textRowsFor(conversationId)
+        if (rows.isEmpty()) return emptyList()
+        // 走活跃路径：从"没有子节点的最后一条"往上回溯
+        val byId = rows.associateBy { it.id }
+        val hasChild = rows.mapNotNull { it.parentId.takeIf { p -> p.isNotBlank() } }.toSet()
+        val tail = rows.lastOrNull { it.id !in hasChild } ?: rows.last()
+        val path = ArrayDeque<com.simplechat.app.db.MessageTextRow>()
+        var cur: com.simplechat.app.db.MessageTextRow? = tail
+        while (cur != null) {
+            path.addFirst(cur)
+            cur = byId[cur.parentId.takeIf { it.isNotBlank() } ?: ""]
+        }
+        // 从后往前攒，攒够预算就停
+        val picked = ArrayDeque<Pair<String, String>>()
+        var used = 0
+        for (row in path.reversed()) {
+            val cost = row.content.length
+            if (used + cost > maxChars) break
+            picked.addFirst(row.role to row.content)
+            used += cost
+        }
+        return picked.toList()
+    }
+
     /** 切到某个版本。同一个父亲下只有它会 `active = 1`。 */
     suspend fun activateVariant(messageId: String, conversationId: String, parentId: String) =
         messages.activate(messageId, conversationId, parentId)

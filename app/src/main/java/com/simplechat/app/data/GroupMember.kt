@@ -13,6 +13,8 @@ data class GroupMember(
     val name: String,
     /** 她的上下文文件 URI（SAF，读得到就够）。 */
     val injectUri: String,
+    /** 她的会话 id：引擎读"最近对话"用。空 = 只按注入文件说话。 */
+    val conversationId: String? = null,
 )
 
 object GroupMembers {
@@ -22,6 +24,7 @@ object GroupMembers {
             put(JSONObject().apply {
                 put("name", m.name)
                 put("inject", m.injectUri)
+                m.conversationId?.let { put("conv", it) }
             })
         }
     }.toString()
@@ -32,7 +35,7 @@ object GroupMembers {
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val name = o.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val inject = o.optString("inject").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            GroupMember(name, inject)
+            GroupMember(name, inject, o.optString("conv").takeIf { it.isNotBlank() })
         }
     }.getOrDefault(emptyList())
 }

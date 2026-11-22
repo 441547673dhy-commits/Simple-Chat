@@ -113,6 +113,15 @@ interface ConversationDao {
  *
  * 刻意只有这几列：判断"当前分支是哪条"不需要正文与附件。
  */
+/** 只有正文的消息行（群聊引擎读历史用）。 */
+data class MessageTextRow(
+    val id: String,
+    val parentId: String,
+    val role: String,
+    val content: String,
+    val createdAt: Long,
+)
+
 data class MessageLight(
     val id: String,
     val parentId: String,
@@ -243,6 +252,15 @@ interface MessageDao {
         """,
     )
     suspend fun getLightFor(conversationId: String): List<MessageLight>
+
+    /**
+     * 只取正文字段（**不含 attachments**）。
+     *
+     * 群聊引擎要读某个会话的历史当上下文；用整条实体会把 base64 图片一起读进内存，
+     * 一条会话几十张图就是几百 MB。
+     */
+    @Query("SELECT id, parentId, role, content, createdAt FROM messages WHERE conversationId = :conversationId")
+    suspend fun textRowsFor(conversationId: String): List<MessageTextRow>
 
     /** 按 id 批量取整条消息（活跃路径上的那些）。 */
     @Query("SELECT * FROM messages WHERE id IN (:ids)")

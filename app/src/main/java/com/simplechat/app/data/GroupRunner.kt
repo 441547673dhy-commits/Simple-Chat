@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.toList
 class GroupRunner(
     private val chatApi: ChatApi,
     private val settingsStore: SettingsStore,
+    private val repository: ChatRepository,
 ) {
 
     /** 一轮的进度回调（给界面显示"谁在说话"）。 */
@@ -87,6 +88,11 @@ class GroupRunner(
         hostName: String,
     ): String {
         val persona = settingsStore.readTextFrom(android.net.Uri.parse(member.injectUri))
+        // 她自己的最近对话（按"发送预算"裁）——这是"经历"，比档案更能决定她像不像她
+        val recent = member.conversationId?.let { conv ->
+            runCatching { repository.transcriptOf(conv, stored.recentBudgetChars.takeIf { it > 0 } ?: 120_000) }
+                .getOrDefault(emptyList())
+        } ?: emptyList()
         val history = GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
             .takeLast(30)
         val transcript = GroupRules.renderTranscript(history, member.name)
@@ -108,7 +114,20 @@ class GroupRunner(
             OutMessageDto(
                 role = "user",
                 content = kotlinx.serialization.json.JsonPrimitive(
-                    "群里最近的对话：\n\n" + transcript + "\n\n轮到你说了。",
+                    buildString {
+                        if (recent.isNotEmpty()) {
+                            appendLine("你们之前的对话（最近的）：")
+                            recent.forEach { (role, text) ->
+                                appendLine((if (role == "user") "他：" else "你：") + text.take(2000))
+                            }
+                            appendLine()
+                        }
+                        appendLine("群里最近的对话：")
+                        append(transcript)
+                        appendLine()
+                        appendLine()
+                        append("轮到你说了。")
+                    },
                 ),
             ),
         )
