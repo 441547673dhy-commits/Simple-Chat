@@ -3320,7 +3320,8 @@ private fun GroupLogPage(store: com.simplechat.app.data.SettingsStore) {
         SettingsSectionLabel("群聊")
         SettingsCard {
             SettingsActionRow(
-                label = if (fileName.isBlank()) "选择群聊文件" else "群文件已选",
+                // 显示真实文件名（解码后的）：之前写成固定文案，反而看不出是哪个群
+                label = if (fileName.isBlank()) "选择群聊文件" else fileName,
                 hint = if (lines.isEmpty()) "选一个 群聊.jsonl（可读可写）"
                 else "${lines.size} 条 · 点按换文件",
                 onClick = { picker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
