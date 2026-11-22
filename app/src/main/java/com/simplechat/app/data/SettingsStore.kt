@@ -186,6 +186,14 @@ data class StoredSettings(
     /** 群聊引擎读"最近对话"的字符预算。0 = 不限。与聊天页的发送预算分开。 */
     val groupBudgetChars: Int = 120_000,
 
+    /**
+     * 窗口外补段字符数：预算裁掉的历史里，**紧贴窗口尾部**那一段也发进去。
+     *
+     * 目的：让"连续记忆"比预算更长，且不与窗口内重复（锚点跟着边界走）。
+     * 0 = 关闭。
+     */
+    val contextTailChars: Int = 30_000,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -258,6 +266,7 @@ class SettingsStore(
             recentBudgetChars = prefs[Keys.RECENT_BUDGET] ?: 400_000,
             frequencyPenalty = prefs[Keys.FREQ_PENALTY] ?: 0.0,
             groupBudgetChars = prefs[Keys.GROUP_BUDGET] ?: 120_000,
+            contextTailChars = prefs[Keys.CONTEXT_TAIL] ?: 30_000,
 
         )
     }
@@ -380,6 +389,11 @@ class SettingsStore(
     /** 是否只发送最近一段历史。 */
     suspend fun setRecentOnly(enabled: Boolean) {
         preferences.edit { it[Keys.RECENT_ONLY] = enabled }
+    }
+
+    /** 窗口外补段。见 [StoredSettings.contextTailChars]。 */
+    suspend fun setContextTailChars(value: Int) {
+        preferences.edit { it[Keys.CONTEXT_TAIL] = value.coerceAtLeast(0) }
     }
 
     /** 群聊预算。见 [StoredSettings.groupBudgetChars]。 */
@@ -825,6 +839,7 @@ class SettingsStore(
         val RECENT_BUDGET = intPreferencesKey("recent_budget_chars")
         val FREQ_PENALTY = doublePreferencesKey("frequency_penalty")
         val GROUP_BUDGET = intPreferencesKey("group_budget_chars")
+        val CONTEXT_TAIL = intPreferencesKey("context_tail_chars")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")
 

@@ -749,6 +749,12 @@ fun SettingsScreen(
                             onPickGroupChat = {
                                 groupPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
                             },
+                            contextTail = stored.contextTailChars,
+                            onCycleContextTail = {
+                                val steps = listOf(0, 10_000, 20_000, 30_000, 50_000, 80_000, 120_000)
+                                val idx = steps.indexOf(stored.contextTailChars).takeIf { it >= 0 } ?: 3
+                                scope.launch { store.setContextTailChars(steps[(idx + 1) % steps.size]) }
+                            },
                             onTestTools = {
                                 scope.launch {
                                     val msg = runCatching {
@@ -1612,6 +1618,8 @@ private fun DataPage(
     onCycleWordGuard: () -> Unit = {},
     onPickGroupChat: () -> Unit = {},
     onTestTools: () -> Unit = {},
+    contextTail: Int = 30_000,
+    onCycleContextTail: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
     onUnbindLog: () -> Unit = {},
 ) {
@@ -1691,6 +1699,12 @@ private fun DataPage(
             label = "同步群聊记录",
             hint = "选群聊 jsonl，把新消息追加进本会话（先预览，确认才写）",
             onClick = onPickGroupChat,
+        )
+        SettingsActionRow(
+            label = "窗口外补段",
+            hint = if (contextTail == 0) "关 · 点按切换（预算之外，紧贴窗口的那段历史）"
+            else (contextTail / 10_000).toString() + " 万字符 · 点按切换（扩展连续记忆）",
+            onClick = onCycleContextTail,
         )
         SettingsActionRow(
             label = "发送预算",

@@ -2280,11 +2280,44 @@ class ChatViewModel(
         }
 
         // 顺序规则见 `orderedOutgoingMessages`（纯函数，有单测钉死）
-        val recentOnly = settingsStore.flow.first().recentOnly
-        val outgoingList = orderedOutgoingMessages(messages, active).let { list ->
-            if (recentOnly) {
-                trimToRecentBudget(list, cappedBudget(settingsStore.flow.first().recentBudgetChars))
-            } else list
+        val snapshot = settingsStore.flow.first()
+        val recentOnly = snapshot.recentOnly
+        val fullList = orderedOutgoingMessages(messages, active)
+        val outgoingList = if (recentOnly) {
+            trimToRecentBudget(fullList, cappedBudget(snapshot.recentBudgetChars))
+        } else fullList
+
+        /*
+         * 窗口外补段（"锚点跟着边界走"）。
+         *
+         * 预算裁掉的那部分历史里，**紧贴窗口的那一段**才是她缺失的记忆；
+         * 越靠前越久远，价值越低。所以取被裁部分的**尾部**若干字符，
+         * 以 system 身份插在历史之前 —— 她的连续记忆因此比预算更长，
+         * 而且永远不会和窗口内的内容重复（那是两段不同的历史）。
+         */
+        val tailBudget = snapshot.contextTailChars
+        if (recentOnly && tailBudget > 0 && outgoingList.size < fullList.size) {
+            val dropped = fullList.subList(0, fullList.size - outgoingList.size)
+            val picked = ArrayDeque<com.simplechat.app.data.UiMessage>()
+            var used = 0
+            for (m in dropped.asReversed()) {
+                val cost = m.content.length
+                if (used + cost > tailBudget) break
+                picked.addFirst(m)
+                used += cost
+            }
+            if (picked.isNotEmpty()) {
+                request += OutMessageDto(
+                    role = "system",
+                    content = MessageContent.text(
+                        "更早的对话（节选，续在下面这段历史之前）：\n" +
+                            picked.joinToString("\n") { m ->
+                                (if (m.role == MessageRole.USER) "他：" else "她：") +
+                                    m.content.take(1200)
+                            },
+                    ),
+                )
+            }
         }
         outgoingList.forEach { message ->
             /*
