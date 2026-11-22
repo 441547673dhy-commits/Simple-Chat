@@ -2298,7 +2298,7 @@ class ChatViewModel(
         val tailBudget = snapshot.contextTailChars
         if (recentOnly && tailBudget > 0 && outgoingList.size < fullList.size) {
             val dropped = fullList.subList(0, fullList.size - outgoingList.size)
-            val picked = ArrayDeque<com.simplechat.app.data.UiMessage>()
+            val picked = ArrayDeque<UiMessage>()
             var used = 0
             for (m in dropped.asReversed()) {
                 val cost = m.content.length
