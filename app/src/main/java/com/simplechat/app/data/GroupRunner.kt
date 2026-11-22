@@ -95,6 +95,8 @@ class GroupRunner(
             if (persona.isNotBlank()) append(persona.trim()).appendLine().appendLine()
             appendLine("## 群聊规则")
             appendLine("- 这是群聊，除了你还有其他人，也有他本人（$hostName）。")
+            appendLine("- 资料里写的「他」就是面前的这个人，跟他说话用「你」，别说「他」。")
+            appendLine("- 现在是 " + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US).format(java.util.Date()) + "，说时间就按这个来，别猜。")
             appendLine("- 要指定跟谁说，开头写 `→名字`；对所有人说写 `→全体`。")
             appendLine("- 一条回复最多 80 字，别写成小作文。")
             appendLine("- 不想说，只回 `[END]`。")
@@ -130,7 +132,8 @@ class GroupRunner(
 /** 群聊的文本规则（引擎与界面共用）。 */
 object GroupRules {
 
-    private val target = Regex("^\\s*(?:→|->)\\s*(\\S+?)\\s+")
+    // 允许 `→名字 正文` 和 `→名字：正文`（实测她爱加冒号，原来解析不到）
+    private val target = Regex("^\\s*(?:→|->)\\s*([^\\s：:，,。]+)\\s*[：:]?\\s*")
 
     /** 解析 `→名字 正文`；没有箭头返回 (fallback, 原文)。 */
     fun parseTarget(text: String, fallback: String?): Pair<String?, String> {
