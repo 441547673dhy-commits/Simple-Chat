@@ -3295,6 +3295,7 @@ private fun GroupLogPage(
     var speaking by remember { mutableStateOf("") }
     var stopRequested by remember { mutableStateOf(false) }
     var showConversationPicker by remember { mutableStateOf(false) }
+    var backfillOnAdd by remember { mutableStateOf(false) }
     var atTarget by remember { mutableStateOf<String?>(null) }
     var atPickerOpen by remember { mutableStateOf(false) }
     var replyTo by remember { mutableStateOf<com.simplechat.app.data.GroupLine?>(null) }
@@ -3382,7 +3383,7 @@ private fun GroupLogPage(
     if (showConversationPicker) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showConversationPicker = false },
-            title = { Text("选一个会话当成员") },
+            title = { Text(if (backfillOnAdd) "选一个会话当成员（补看全部群历史）" else "选一个会话当成员（只看新消息）") },
             text = {
                 LazyColumn(modifier = Modifier.height(320.dp)) {
                     items(conversations.size) { i ->
@@ -3390,18 +3391,28 @@ private fun GroupLogPage(
                         TextButton(onClick = {
                             showConversationPicker = false
                             scope.launch {
+                                // 游标 0 = 群聊历史全部补进去（她能看到加入前的对话）
+                                if (backfillOnAdd) store.setGroupSyncSeq(c.id, 0)
                                 val inject = store.personaFileUriFor(c.id)
                                 val name = c.title.take(12).ifBlank { "成员" }
                                 members = members.filter { it.name != name } +
                                     com.simplechat.app.data.GroupMember(name, inject, c.id)
                                 store.setGroupMembers(members)
+                                // 补看历史：游标已置 0，这里立刻同步一次
+                                if (backfillOnAdd && uriString.isNotBlank()) {
+                                    runCatching { runner.syncIntoConversations(uriString, members, "大馋鬼") }
+                                }
                             }
                         }) { Text(c.title.ifBlank { c.id.take(8) }) }
                     }
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { showConversationPicker = false }) { Text("取消") } },
+            dismissButton = {
+                TextButton(onClick = { backfillOnAdd = !backfillOnAdd }) {
+                    Text(if (backfillOnAdd) "改为：只看新消息" else "改为：补看全部历史")
+                }
+            },
         )
     }
 
@@ -3705,6 +3716,8 @@ private fun GroupLogPage(
                             atTarget = null
                             replyTo = null
                             load(uriString)
+                            // 他刚说的话也要进她们的会话，否则她们下一轮"回复"的是空气
+                            runCatching { runner.syncIntoConversations(uriString, members, "大馋鬼") }
                         }
                     },
                 ) { Text("发送") }

@@ -99,7 +99,7 @@ class GroupRunner(
      * 用**每个会话自己的游标**，所以不会重复写；她自己说过的话跳过
      * （那句话本来就在她会话里）。
      */
-    private suspend fun syncIntoConversations(
+    suspend fun syncIntoConversations(
         groupUri: String,
         members: List<GroupMember>,
         hostName: String,
