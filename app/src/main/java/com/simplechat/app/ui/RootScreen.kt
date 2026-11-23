@@ -111,6 +111,7 @@ fun RootScreen(chat: ChatViewModel? = null, history: HistoryViewModel? = null) {
             settingsStore = container.settingsStore,
             repository = container.chatRepository,
             openCodeSessionId = container.openCodeSessionId,
+            appContext = LocalContext.current.applicationContext,
         ),
     )
     val historyViewModel: HistoryViewModel = history ?: viewModel(

@@ -97,6 +97,8 @@ class ChatViewModel(
     private val settingsStore: SettingsStore,
     private val repository: ChatRepository,
     private val openCodeSessionId: String,
+    /** 只用于写用量流水（UsageLog）；拿不到就跳过记录，不影响对话。 */
+    private val appContext: android.content.Context? = null,
 ) : ViewModel() {
 
     val messages = mutableStateListOf<UiMessage>()
@@ -1029,6 +1031,21 @@ class ChatViewModel(
      * `message_delta` 只有输出侧；OpenAI 通道有些网关也会拆开），所以这里做合并：
      * 有值就覆盖、没值就沿用上一次，缺字段不能把已有数据冲成 0。
      */
+    private fun logUsageToFile(u: RequestUsage) {
+        runCatching {
+            val ctx = appContext ?: return
+            com.simplechat.app.data.UsageLog.append(
+                context = ctx,
+                kind = "chat",
+                who = openCodeSessionId, // 会话标题拿不到就用 id，够对账
+                model = "chat",
+                promptTokens = u.promptTokens,
+                completionTokens = u.completionTokens,
+                cacheHitTokens = u.cacheHitTokens,
+            )
+        }
+    }
+
     private fun recordUsage(event: StreamEvent.Usage) {
         val previous = lastUsage
         lastUsage = RequestUsage(
@@ -1676,7 +1693,7 @@ class ChatViewModel(
 
                             is StreamEvent.Usage -> recordUsage(event)
 
-                            StreamEvent.Done -> Unit
+                            StreamEvent.Done -> lastUsage?.let { logUsageToFile(it) }
 
                             // 流内错误对象是**上游网关原文**（如 `No available channel …`）：
                             // 先翻成人话，认不出才保留原文（见 `serverErrorText`）
@@ -1731,7 +1748,7 @@ class ChatViewModel(
                                缓存命中率就是从这里来的（见 recordUsage）。 */
                             is StreamEvent.Usage -> recordUsage(event)
 
-                            StreamEvent.Done -> Unit
+                            StreamEvent.Done -> lastUsage?.let { logUsageToFile(it) }
 
                             // 流内错误对象是**上游网关原文**（如 `No available channel …`）：
                             // 先翻成人话，认不出才保留原文（见 `serverErrorText`）
@@ -2437,9 +2454,10 @@ class ChatViewModel(
             settingsStore: SettingsStore,
             repository: ChatRepository,
             openCodeSessionId: String,
+            appContext: android.content.Context? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                ChatViewModel(chatApi, settingsStore, repository, openCodeSessionId)
+                ChatViewModel(chatApi, settingsStore, repository, openCodeSessionId, appContext)
             }
         }
     }

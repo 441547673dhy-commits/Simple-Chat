@@ -204,6 +204,17 @@ class GroupRunner(
             temperature = 0.8,
         ).toList()
 
+        chunks.filterIsInstance<StreamEvent.Usage>().lastOrNull()?.let { u ->
+            UsageLog.append(
+                context = appContext,
+                kind = "group",
+                who = member.name,
+                model = stored.modelId.ifBlank { "deepseek-chat" },
+                promptTokens = u.promptTokens,
+                completionTokens = u.completionTokens,
+                cacheHitTokens = u.cacheHitTokens,
+            )
+        }
         val text = chunks.filterIsInstance<StreamEvent.Content>().joinToString("") { it.text }.trim()
         val thinking = chunks.filterIsInstance<StreamEvent.Reasoning>().joinToString("") { it.text }.trim()
         return text to thinking

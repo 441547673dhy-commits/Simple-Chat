@@ -1829,7 +1829,23 @@ private fun DataPage(
      */
     SettingsSectionLabel(stringResource(R.string.settings_group_diagnostics))
 
-    SettingsCard {
+        SettingsCard {
+        SettingsActionRow(
+            label = "导出用量流水",
+            hint = "每次请求的 token 与估算费用（csv），用来跟平台账单对账",
+            onClick = {
+                val f = com.simplechat.app.data.UsageLog.file(context)
+                if (!f.exists()) {
+                    android.widget.Toast.makeText(context, "还没有记录", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
+                    com.simplechat.app.data.GroupSyncLog.writeTextFile(context, "用量-" + stamp + ".csv", f.readText())
+                    android.widget.Toast.makeText(context, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
+        RowDivider()
+SettingsCard {
         SettingsActionRow(
             label = "测试 tools 支持",
             hint = "发一个带工具声明的请求，看通道认不认 function calling",
