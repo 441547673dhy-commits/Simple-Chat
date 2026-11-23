@@ -15,8 +15,13 @@ data class GroupMember(
     val injectUri: String,
     /** 她的会话 id：引擎读"最近对话"用。空 = 只按注入文件说话。 */
     val conversationId: String? = null,
-    /** 记录/显示她的思考过程（只给你看，不回传给她）。 */
-    val thinking: Boolean = true,
+    /**
+     * 记录/显示她的思考过程（只给你看，不回传给她）。
+     *
+     * **默认关**：思考 token 是输出的 1~2 倍（花钱），且回读容易让她表演思考。
+     * 他 2026-11-23 定的规矩：有影响的东西默认不开，除不开启影响更大——那种要提前说。
+     */
+    val thinking: Boolean = false,
 )
 
 object GroupMembers {
@@ -42,7 +47,7 @@ object GroupMembers {
                 name = name,
                 injectUri = inject,
                 conversationId = o.optString("conv").takeIf { it.isNotBlank() },
-                thinking = o.optBoolean("think", true),
+                thinking = o.optBoolean("think", false),
             )
         }
     }.getOrDefault(emptyList())
