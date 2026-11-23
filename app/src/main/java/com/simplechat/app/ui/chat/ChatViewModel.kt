@@ -1042,15 +1042,15 @@ class ChatViewModel(
      */
     private fun maybeExtractTodo(reply: String) {
         val ctx = appContext ?: return
-        val settingsNow = settings
-        if (!settingsNow.todoExtract) return
         val userSaid = messages.lastOrNull { it.role == MessageRole.USER }?.content ?: return
         if (userSaid.isBlank() || reply.isBlank()) return
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val snap = settingsStore.flow.first()
+            if (!snap.todoExtract) return@launch   // 默认关：开关在设置里
             com.simplechat.app.data.TodoExtractor.extract(
                 context = ctx,
                 chatApi = chatApi,
-                store = settingsStore.flow.first(),
+                store = snap,
                 userSaid = userSaid,
                 sheSaid = reply,
             )
