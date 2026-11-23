@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -3614,16 +3615,44 @@ private fun GroupLogPage(
                     val thumb = (360.dp * ratio).coerceAtLeast(40.dp)
                     val maxScroll = (total - visible).coerceAtLeast(1)
                     val frac = listState.firstVisibleItemIndex.toFloat() / maxScroll
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    val trackPx = with(density) { (360.dp - thumb).toPx() }.coerceAtLeast(1f)
+                    var acc by remember { androidx.compose.runtime.mutableStateOf(0f) }
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .padding(end = 2.dp)
-                            .width(4.dp)
+                            .width(14.dp)          // 视觉 4dp，触摸区放宽到 14dp
                             .height(thumb)
                             .offset(y = ((360.dp - thumb) * frac.coerceIn(0f, 1f)))
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)),
-                    )
+                            .pointerInput(total, visible) {
+                                androidx.compose.foundation.gestures.detectVerticalDragGestures(
+                                    onDragStart = { acc = 0f },
+                                    onDragEnd = { acc = 0f },
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    acc += dragAmount / trackPx * maxScroll
+                                    val step = acc.toInt()
+                                    if (step != 0) {
+                                        acc -= step
+                                        scope.launch {
+                                            val target = (listState.firstVisibleItemIndex + step)
+                                                .coerceIn(0, maxScroll)
+                                            listState.scrollToItem(target)
+                                        }
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(4.dp)
+                                .fillMaxHeight()
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)),
+                        )
+                    }
                 }
             }
 
