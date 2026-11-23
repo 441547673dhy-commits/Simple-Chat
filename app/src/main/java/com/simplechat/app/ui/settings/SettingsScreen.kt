@@ -771,6 +771,21 @@ fun SettingsScreen(
                                 val idx = steps.indexOf(stored.contextTailChars).takeIf { it >= 0 } ?: 3
                                 scope.launch { store.setContextTailChars(steps[(idx + 1) % steps.size]) }
                             },
+                            onExportUsage = {
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val f = com.simplechat.app.data.UsageLog.file(context)
+                                    if (!f.exists()) {
+                                        android.widget.Toast.makeText(context, "还没有记录", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+                                            .format(java.util.Date())
+                                        com.simplechat.app.data.GroupSyncLog.writeTextFile(
+                                            context, "用量-" + stamp + ".csv", f.readText(),
+                                        )
+                                        android.widget.Toast.makeText(context, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
                             onTestTools = {
                                 scope.launch {
                                     val msg = runCatching {
@@ -1638,6 +1653,7 @@ private fun DataPage(
     onCycleWordGuard: () -> Unit = {},
     onPickGroupChat: () -> Unit = {},
     onTestTools: () -> Unit = {},
+    onExportUsage: () -> Unit = {},
     reasonBack: Boolean = false,
     onToggleReasonBack: () -> Unit = {},
     contextTail: Int = 30_000,
@@ -1830,22 +1846,10 @@ private fun DataPage(
     SettingsSectionLabel(stringResource(R.string.settings_group_diagnostics))
 
     SettingsCard {
-        val exportCtx = androidx.compose.ui.platform.LocalContext.current
         SettingsActionRow(
             label = "导出用量流水",
             hint = "每次请求的 token 与估算费用（csv），用来跟平台账单对账",
-            onClick = {
-              scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                val f = com.simplechat.app.data.UsageLog.file(exportCtx)
-                if (!f.exists()) {
-                    android.widget.Toast.makeText(exportCtx, "还没有记录", android.widget.Toast.LENGTH_SHORT).show()
-                } else {
-                    val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
-                    com.simplechat.app.data.GroupSyncLog.writeTextFile(exportCtx, "用量-" + stamp + ".csv", f.readText())
-                    android.widget.Toast.makeText(exportCtx, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
-                }
-              }
-            },
+            onClick = onExportUsage,
         )
         RowDivider()
         SettingsActionRow(
