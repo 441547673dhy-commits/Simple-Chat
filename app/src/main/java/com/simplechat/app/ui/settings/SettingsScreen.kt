@@ -771,6 +771,13 @@ fun SettingsScreen(
                                 val idx = steps.indexOf(stored.contextTailChars).takeIf { it >= 0 } ?: 3
                                 scope.launch { store.setContextTailChars(steps[(idx + 1) % steps.size]) }
                             },
+                            memoryOn = stored.memoryEnabled,
+                            memoryKeySet = memoryKeySet,
+                            onToggleMemory = {
+                                scope.launch { store.setMemoryEnabled(!stored.memoryEnabled) }
+                            },
+                            onSetMemoryKey = { showMemoryKeyDialog = true },
+                            onImportPack = { packPicker.launch(arrayOf("application/octet-stream", "*/*")) },
                             onExportUsage = {
                                 scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                     val f = com.simplechat.app.data.UsageLog.file(context)
@@ -1654,6 +1661,11 @@ private fun DataPage(
     onPickGroupChat: () -> Unit = {},
     onTestTools: () -> Unit = {},
     onExportUsage: () -> Unit = {},
+    memoryOn: Boolean = false,
+    onToggleMemory: () -> Unit = {},
+    onImportPack: () -> Unit = {},
+    onSetMemoryKey: () -> Unit = {},
+    memoryKeySet: Boolean = false,
     reasonBack: Boolean = false,
     onToggleReasonBack: () -> Unit = {},
     contextTail: Int = 30_000,
@@ -1664,6 +1676,22 @@ private fun DataPage(
     var unbindAsk by remember { mutableStateOf<String?>(null) }
     SettingsSectionLabel("角色档案")
     SettingsCard {
+        SettingsActionRow(
+            label = "记忆检索",
+            hint = if (memoryOn) "开 · 每轮会从旧记忆里找相关段落" else "关 · 点按打开（需先导入索引包）",
+            onClick = onToggleMemory,
+        )
+        SettingsActionRow(
+            label = "向量服务 Key",
+            hint = if (memoryKeySet) "已设置 · 点按更换" else "未设置 · 点按填写（硅基流动）",
+            onClick = onSetMemoryKey,
+        )
+        SettingsActionRow(
+            label = "导入记忆包",
+            hint = "选 记忆.pack（离线建好的索引，约 30MB）",
+            onClick = onImportPack,
+        )
+        RowDivider()
         SettingsActionRow(
             label = "注入文件（只读）",
             hint = if (personaFileName.isBlank()) {
@@ -3322,6 +3350,9 @@ private fun GroupLogPage(
     var atPickerOpen by remember { mutableStateOf(false) }
     var replyTo by remember { mutableStateOf<com.simplechat.app.data.GroupLine?>(null) }
     var showThinkingPicker by remember { mutableStateOf(false) }
+    var showMemoryKeyDialog by remember { mutableStateOf(false) }
+    var memoryKeyDraft by remember { mutableStateOf("") }
+    var memoryKeySet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val runner = remember {
@@ -3436,6 +3467,54 @@ private fun GroupLogPage(
                 }
             },
         )
+    }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        memoryKeySet = store.memoryKey().isNotBlank()
+    }
+
+    if (showMemoryKeyDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showMemoryKeyDialog = false },
+            title = { Text("向量服务 Key（硅基流动）") },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = memoryKeyDraft,
+                    onValueChange = { memoryKeyDraft = it },
+                    label = { Text("sk-…") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        store.setMemoryKey(memoryKeyDraft)
+                        memoryKeySet = memoryKeyDraft.isNotBlank()
+                        memoryKeyDraft = ""
+                        showMemoryKeyDialog = false
+                        android.widget.Toast.makeText(context, "已保存（加密）", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { showMemoryKeyDialog = false }) { Text("取消") } },
+        )
+    }
+
+    val packPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val bytes = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }.getOrNull()
+            if (bytes == null) {
+                android.widget.Toast.makeText(context, "读不到文件", android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val n = com.simplechat.app.data.MemoryPack.import(context, bytes)
+            android.widget.Toast.makeText(context, "已导入 " + n + " 段", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     val memberPicker = rememberLauncherForActivityResult(
