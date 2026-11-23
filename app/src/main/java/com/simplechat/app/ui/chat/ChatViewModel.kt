@@ -2326,7 +2326,7 @@ class ChatViewModel(
                 val owner = com.simplechat.app.ui.settings.personaDisplayName(
                     settingsStore.personaFileUriFor(currentConversationId),
                 ).substringBefore('-').takeIf { it.isNotBlank() && it != "未绑定" }
-                val hits = pack.search(vec, owner, snapshot.memoryTopK)
+                val hits = pack.search(vec, owner, snapshot.memoryTopK, question)
                 if (hits.isEmpty()) return@runCatching
                 request += OutMessageDto(
                     role = "system",
