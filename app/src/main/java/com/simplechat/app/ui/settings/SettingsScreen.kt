@@ -17,6 +17,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -3616,33 +3618,32 @@ private fun GroupLogPage(
                     val maxScroll = (total - visible).coerceAtLeast(1)
                     val frac = listState.firstVisibleItemIndex.toFloat() / maxScroll
                     val density = androidx.compose.ui.platform.LocalDensity.current
-                    val trackPx = with(density) { (360.dp - thumb).toPx() }.coerceAtLeast(1f)
                     var acc by remember { androidx.compose.runtime.mutableStateOf(0f) }
+                    // 拖动换算：拖动像素 / 每条的像素高度 ≈ 该滚多少条
+                    val dragState = rememberDraggableState { deltaPx ->
+                        val perItem = with(density) { (360.dp - thumb).toPx() } / maxScroll.toFloat()
+                        acc += deltaPx / perItem
+                        val step = acc.toInt()
+                        if (step != 0) {
+                            acc -= step
+                            scope.launch {
+                                listState.scrollToItem(
+                                    (listState.firstVisibleItemIndex + step).coerceIn(0, maxScroll),
+                                )
+                            }
+                        }
+                    }
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .padding(end = 2.dp)
-                            .width(14.dp)          // 视觉 4dp，触摸区放宽到 14dp
+                            .width(14.dp)
                             .height(thumb)
                             .offset(y = ((360.dp - thumb) * frac.coerceIn(0f, 1f)))
-                            .pointerInput(total, visible) {
-                                androidx.compose.foundation.gestures.detectVerticalDragGestures(
-                                    onDragStart = { acc = 0f },
-                                    onDragEnd = { acc = 0f },
-                                ) { change, dragAmount ->
-                                    change.consume()
-                                    acc += dragAmount / trackPx * maxScroll
-                                    val step = acc.toInt()
-                                    if (step != 0) {
-                                        acc -= step
-                                        scope.launch {
-                                            val target = (listState.firstVisibleItemIndex + step)
-                                                .coerceIn(0, maxScroll)
-                                            listState.scrollToItem(target)
-                                        }
-                                    }
-                                }
-                            },
+                            .draggable(
+                                state = dragState,
+                                orientation = androidx.compose.foundation.gestures.Orientation.Vertical,
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
