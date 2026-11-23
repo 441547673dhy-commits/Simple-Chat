@@ -1022,6 +1022,10 @@ class ChatViewModel(
      * 切换会话时清空 —— 新会话还没发过请求，显示上一轮的数字是错的。
      */
     var lastUsage by mutableStateOf<RequestUsage?>(null)
+
+    /** 记忆包缓存（首次用时加载，30MB，只读）。 */
+    private var memoryPack: com.simplechat.app.data.MemoryPack? = null
+    private val embeddingApi = com.simplechat.app.net.EmbeddingApi()
         private set
 
     /**
@@ -2298,6 +2302,48 @@ class ChatViewModel(
 
         // 顺序规则见 `orderedOutgoingMessages`（纯函数，有单测钉死）
         val snapshot = settingsStore.flow.first()
+
+        /*
+         * 记忆检索：把"窗口外的旧事"按语义找回来。
+         *
+         * 只在开关打开、索引包存在、向量 key 就位时生效；任何一步失败都静默跳过
+         * —— 记忆检索坏了不该影响正常对话。
+         */
+        if (snapshot.memoryEnabled) {
+            runCatching {
+                val ctx = appContext
+                val key = settingsStore.memoryKey()
+                if (ctx == null || key.isBlank()) return@runCatching
+                val pack = memoryPack ?: com.simplechat.app.data.MemoryPack.load(ctx)?.also { memoryPack = it }
+                if (pack == null) return@runCatching
+                val question = messages.lastOrNull {
+                    it.role == MessageRole.USER && it.content.isNotBlank()
+                }?.content
+                if (question.isNullOrBlank()) return@runCatching
+                val vec = embeddingApi.embed(
+                    snapshot.memoryBaseUrl, key, snapshot.memoryModel, question,
+                ) ?: return@runCatching
+                // owner 用她绑定的人格文件名前缀（1号-上下文.md → 1号）
+                val owner = com.simplechat.app.ui.settings.personaDisplayName(
+                    settingsStore.personaFileUriFor(currentConversationId),
+                ).substringBefore('-').takeIf { it.isNotBlank() && it != "未绑定" }
+                val hits = pack.search(vec, owner, snapshot.memoryTopK)
+                if (hits.isEmpty()) return@runCatching
+                request += OutMessageDto(
+                    role = "system",
+                    content = MessageContent.text(
+                        buildString {
+                            appendLine("【旧记忆】以下是按当前话题从更早的记录里找出来的，可能相关也可能不相关：")
+                            appendLine("（用法：自然想起就用，不要念出处，不要逐字复述。）")
+                            hits.forEach { h ->
+                                appendLine()
+                                appendLine("【" + pack.timestamps[h.index].take(10) + "】" + pack.textAt(h.index).take(600))
+                            }
+                        },
+                    ),
+                )
+            }
+        }
         val reasonBack = settingsStore.reasonBackFor(currentConversationId)
         val recentOnly = snapshot.recentOnly
         val fullList = orderedOutgoingMessages(messages, active)
