@@ -202,6 +202,18 @@ data class StoredSettings(
      */
     val groupShowThinking: Boolean = false,
 
+    /**
+     * 记忆检索（向量）。默认**关**——它要调外部向量服务、并把一段对话发出去。
+     * 他 2026-11-23 定的规矩：有影响的功能默认关。
+     */
+    val memoryEnabled: Boolean = false,
+    /** 向量服务地址（硅基流动默认）。 */
+    val memoryBaseUrl: String = "https://api.siliconflow.cn/v1",
+    /** 向量模型（bge-m3 免费、1024 维）。 */
+    val memoryModel: String = "BAAI/bge-m3",
+    /** 每次注入几段旧记忆。 */
+    val memoryTopK: Int = 5,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -276,6 +288,10 @@ class SettingsStore(
             groupBudgetChars = prefs[Keys.GROUP_BUDGET] ?: 120_000,
             contextTailChars = prefs[Keys.CONTEXT_TAIL] ?: 30_000,
             groupShowThinking = prefs[Keys.GROUP_SHOW_THINK] ?: false,
+            memoryEnabled = prefs[Keys.MEMORY_ENABLED] ?: false,
+            memoryBaseUrl = prefs[Keys.MEMORY_BASE] ?: "https://api.siliconflow.cn/v1",
+            memoryModel = prefs[Keys.MEMORY_MODEL] ?: "BAAI/bge-m3",
+            memoryTopK = prefs[Keys.MEMORY_TOPK] ?: 5,
 
         )
     }
@@ -412,6 +428,27 @@ class SettingsStore(
     suspend fun setReasonBack(conversationId: String?, on: Boolean) {
         if (conversationId.isNullOrBlank()) return
         preferences.edit { it[stringPreferencesKey("reason_back_$conversationId")] = if (on) "1" else "0" }
+    }
+
+    /** 记忆检索开关。 */
+    suspend fun setMemoryEnabled(value: Boolean) {
+        preferences.edit { it[Keys.MEMORY_ENABLED] = value }
+    }
+
+    /** 向量服务 key（**加密存**，与对话 API key 分开）。 */
+    suspend fun setMemoryKey(value: String) {
+        preferences.edit {
+            if (value.isBlank()) it.remove(Keys.MEMORY_KEY_ENC)
+            else it[Keys.MEMORY_KEY_ENC] = SecretBox.encrypt(value.trim())
+        }
+    }
+
+    suspend fun memoryKey(): String =
+        preferences.data.first()[Keys.MEMORY_KEY_ENC]
+            ?.takeIf { it.isNotBlank() }?.let { SecretBox.decrypt(it) } ?: ""
+
+    suspend fun setMemoryTopK(value: Int) {
+        preferences.edit { it[Keys.MEMORY_TOPK] = value.coerceIn(1, 20) }
     }
 
     /** 群聊里把思考也读给成员。见 [StoredSettings.groupShowThinking]。 */
@@ -869,6 +906,11 @@ class SettingsStore(
         val GROUP_BUDGET = intPreferencesKey("group_budget_chars")
         val CONTEXT_TAIL = intPreferencesKey("context_tail_chars")
         val GROUP_SHOW_THINK = booleanPreferencesKey("group_show_thinking")
+        val MEMORY_ENABLED = booleanPreferencesKey("memory_enabled")
+        val MEMORY_BASE = stringPreferencesKey("memory_base")
+        val MEMORY_MODEL = stringPreferencesKey("memory_model")
+        val MEMORY_KEY_ENC = stringPreferencesKey("memory_key_enc")
+        val MEMORY_TOPK = intPreferencesKey("memory_topk")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")
 
