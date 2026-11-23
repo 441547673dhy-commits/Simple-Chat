@@ -105,7 +105,10 @@ class GroupRunner(
         hostName: String,
     ) {
         val parsed = GroupChat.parse(settingsStore.readTextFrom(android.net.Uri.parse(groupUri)))
-        val tag = android.net.Uri.decode(groupUri.substringAfterLast('/'))
+        // SAF 的 URI 长这样：content://…/primary:肥鱼/记忆/群聊-测试.jsonl
+        // 直接 substringAfterLast('/') 会得到 "primary:肥鱼/记忆/群聊-测试"，太脏
+        val display = android.net.Uri.decode(groupUri.substringAfterLast('/'))
+        val tag = display.substringAfterLast(':').substringAfterLast('/')
             .substringBeforeLast('.').ifBlank { null }
         members.forEach { m ->
             val conv = m.conversationId ?: return@forEach
