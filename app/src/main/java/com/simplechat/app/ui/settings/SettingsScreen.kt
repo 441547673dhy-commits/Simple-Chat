@@ -1830,18 +1830,21 @@ private fun DataPage(
     SettingsSectionLabel(stringResource(R.string.settings_group_diagnostics))
 
     SettingsCard {
+        val exportCtx = androidx.compose.ui.platform.LocalContext.current
         SettingsActionRow(
             label = "导出用量流水",
             hint = "每次请求的 token 与估算费用（csv），用来跟平台账单对账",
             onClick = {
-                val f = com.simplechat.app.data.UsageLog.file(context)
+              scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val f = com.simplechat.app.data.UsageLog.file(exportCtx)
                 if (!f.exists()) {
-                    android.widget.Toast.makeText(context, "还没有记录", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(exportCtx, "还没有记录", android.widget.Toast.LENGTH_SHORT).show()
                 } else {
                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
-                    com.simplechat.app.data.GroupSyncLog.writeTextFile(context, "用量-" + stamp + ".csv", f.readText())
-                    android.widget.Toast.makeText(context, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
+                    com.simplechat.app.data.GroupSyncLog.writeTextFile(exportCtx, "用量-" + stamp + ".csv", f.readText())
+                    android.widget.Toast.makeText(exportCtx, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
                 }
+              }
             },
         )
         RowDivider()
