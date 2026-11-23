@@ -439,7 +439,7 @@ class SettingsStore(
     suspend fun setMemoryKey(value: String) {
         preferences.edit {
             if (value.isBlank()) it.remove(Keys.MEMORY_KEY_ENC)
-            else it[Keys.MEMORY_KEY_ENC] = SecretBox.encrypt(value.trim())
+            else SecretBox.encrypt(value.trim()).let { enc -> if (enc != null) it[Keys.MEMORY_KEY_ENC] = enc }
         }
     }
 

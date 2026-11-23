@@ -119,7 +119,7 @@ class MemoryPack private constructor(
                 scales[i] = buf.float
                 buf.get(vec, i * DIM, DIM)
             }
-            MemoryPack(
+            return MemoryPack(
                 owners = owners.map { it!! }.toTypedArray(),
                 timestamps = times.map { it!! }.toTypedArray(),
                 sources = sources.map { it!! }.toTypedArray(),

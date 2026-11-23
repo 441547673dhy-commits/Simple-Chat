@@ -1026,7 +1026,6 @@ class ChatViewModel(
     /** 记忆包缓存（首次用时加载，30MB，只读）。 */
     private var memoryPack: com.simplechat.app.data.MemoryPack? = null
     private val embeddingApi = com.simplechat.app.net.EmbeddingApi()
-        private set
 
     /**
      * 记录用量。
