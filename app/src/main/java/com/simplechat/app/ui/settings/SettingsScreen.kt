@@ -233,6 +233,10 @@ fun SettingsScreen(
     var showMemoryKeyDialog by remember { mutableStateOf(false) }
     var memoryKeyDraft by remember { mutableStateOf("") }
 
+    val scope = rememberCoroutineScope()
+    val store = container.settingsStore
+    val repository = container.chatRepository
+
     androidx.compose.runtime.LaunchedEffect(Unit) {
         memoryKeySet = store.memoryKey().isNotBlank()
     }
@@ -281,9 +285,6 @@ fun SettingsScreen(
         }
     }
 
-    val scope = rememberCoroutineScope()
-    val store = container.settingsStore
-    val repository = container.chatRepository
 
     var stored by remember { mutableStateOf(StoredSettings()) }
     // rememberSaveable：换语言会 recreate()（见 MainActivity），二级页要停在原地
