@@ -214,6 +214,12 @@ data class StoredSettings(
     /** 每次注入几段旧记忆。 */
     val memoryTopK: Int = 5,
 
+    /**
+     * 自动抽待办：每轮聊完多发一次很小的请求，把"他答应过的事"记下来。
+     * 默认**关**（第 11 条：会花钱、会改行为的功能默认不开）。每轮约 ¥0.003。
+     */
+    val todoExtract: Boolean = false,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -292,6 +298,7 @@ class SettingsStore(
             memoryBaseUrl = prefs[Keys.MEMORY_BASE] ?: "https://api.siliconflow.cn/v1",
             memoryModel = prefs[Keys.MEMORY_MODEL] ?: "BAAI/bge-m3",
             memoryTopK = prefs[Keys.MEMORY_TOPK] ?: 5,
+            todoExtract = prefs[Keys.TODO_EXTRACT] ?: false,
 
         )
     }
@@ -446,6 +453,10 @@ class SettingsStore(
     suspend fun memoryKey(): String =
         preferences.data.first()[Keys.MEMORY_KEY_ENC]
             ?.takeIf { it.isNotBlank() }?.let { SecretBox.decrypt(it) } ?: ""
+
+    suspend fun setTodoExtract(value: Boolean) {
+        preferences.edit { it[Keys.TODO_EXTRACT] = value }
+    }
 
     suspend fun setMemoryTopK(value: Int) {
         preferences.edit { it[Keys.MEMORY_TOPK] = value.coerceIn(1, 20) }
@@ -911,6 +922,7 @@ class SettingsStore(
         val MEMORY_MODEL = stringPreferencesKey("memory_model")
         val MEMORY_KEY_ENC = stringPreferencesKey("memory_key_enc")
         val MEMORY_TOPK = intPreferencesKey("memory_topk")
+        val TODO_EXTRACT = booleanPreferencesKey("todo_extract")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")
 

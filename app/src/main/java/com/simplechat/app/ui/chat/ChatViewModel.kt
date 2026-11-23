@@ -1034,6 +1034,29 @@ class ChatViewModel(
      * `message_delta` 只有输出侧；OpenAI 通道有些网关也会拆开），所以这里做合并：
      * 有值就覆盖、没值就沿用上一次，缺字段不能把已有数据冲成 0。
      */
+    /**
+     * 自动抽待办（默认关）。
+     *
+     * 只在开关注释允许时跑；用"他最后一条消息 + 她这次的回复"，几百 token。
+     * 失败静默 —— 这是附加功能，不该影响对话。
+     */
+    private fun maybeExtractTodo(reply: String) {
+        val ctx = appContext ?: return
+        val settingsNow = settings
+        if (!settingsNow.todoExtract) return
+        val userSaid = messages.lastOrNull { it.role == MessageRole.USER }?.content ?: return
+        if (userSaid.isBlank() || reply.isBlank()) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            com.simplechat.app.data.TodoExtractor.extract(
+                context = ctx,
+                chatApi = chatApi,
+                store = settingsStore.flow.first(),
+                userSaid = userSaid,
+                sheSaid = reply,
+            )
+        }
+    }
+
     private fun logUsageToFile(u: RequestUsage) {
         runCatching {
             val ctx = appContext ?: return
@@ -1696,7 +1719,10 @@ class ChatViewModel(
 
                             is StreamEvent.Usage -> recordUsage(event)
 
-                            StreamEvent.Done -> lastUsage?.let { logUsageToFile(it) }
+                            StreamEvent.Done -> {
+                                lastUsage?.let { logUsageToFile(it) }
+                                maybeExtractTodo(contentBuf.toString())
+                            }
 
                             // 流内错误对象是**上游网关原文**（如 `No available channel …`）：
                             // 先翻成人话，认不出才保留原文（见 `serverErrorText`）

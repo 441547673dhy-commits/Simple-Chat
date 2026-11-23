@@ -829,6 +829,21 @@ fun SettingsScreen(
                             onToggleMemory = {
                                 scope.launch { store.setMemoryEnabled(!stored.memoryEnabled) }
                             },
+                            todoExtractOn = stored.todoExtract,
+                            onToggleTodoExtract = {
+                                scope.launch { store.setTodoExtract(!stored.todoExtract) }
+                            },
+                            onExportTodos = {
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val f = com.simplechat.app.data.TodoExtractor.file(context)
+                                    if (!f.exists()) {
+                                        android.widget.Toast.makeText(context, "还没有抽取过", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        com.simplechat.app.data.GroupSyncLog.writeTextFile(context, "待办-自动.md", f.readText())
+                                        android.widget.Toast.makeText(context, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
                             onSetMemoryKey = { showMemoryKeyDialog = true },
                             onImportPack = { packPicker.launch(arrayOf("application/octet-stream", "*/*")) },
                             onExportUsage = {
@@ -1719,6 +1734,9 @@ private fun DataPage(
     onImportPack: () -> Unit = {},
     onSetMemoryKey: () -> Unit = {},
     memoryKeySet: Boolean = false,
+    todoExtractOn: Boolean = false,
+    onToggleTodoExtract: () -> Unit = {},
+    onExportTodos: () -> Unit = {},
     reasonBack: Boolean = false,
     onToggleReasonBack: () -> Unit = {},
     contextTail: Int = 30_000,
@@ -1733,6 +1751,17 @@ private fun DataPage(
             label = "记忆检索",
             hint = if (memoryOn) "开 · 每轮会从旧记忆里找相关段落" else "关 · 点按打开（需先导入索引包）",
             onClick = onToggleMemory,
+        )
+        SettingsActionRow(
+            label = "自动抽待办",
+            hint = if (todoExtractOn) "开 · 每轮多一次小请求（约 ¥0.003）"
+            else "关 · 点按打开（把你说过要做的事记下来）",
+            onClick = onToggleTodoExtract,
+        )
+        SettingsActionRow(
+            label = "导出待办",
+            hint = "抽出来的事项清单（markdown）",
+            onClick = onExportTodos,
         )
         SettingsActionRow(
             label = "向量服务 Key",
