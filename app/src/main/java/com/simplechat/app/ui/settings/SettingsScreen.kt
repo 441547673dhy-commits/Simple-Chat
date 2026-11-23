@@ -16,6 +16,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,6 +59,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -3290,6 +3294,7 @@ private fun GroupLogPage(
     var showConversationPicker by remember { mutableStateOf(false) }
     var atTarget by remember { mutableStateOf<String?>(null) }
     var atPickerOpen by remember { mutableStateOf(false) }
+    var replyTo by remember { mutableStateOf<com.simplechat.app.data.GroupLine?>(null) }
     var showThinkingPicker by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -3545,8 +3550,11 @@ private fun GroupLogPage(
         if (lines.isNotEmpty()) {
             // 固定高度：这个页面的父容器是可滚动的，weight(1f) 在那种父容器里会被压成 0
             // （2026-11-22 实测：时间线完全不显示，只能看到输入框）
+            val listState = rememberLazyListState()
+            Box(modifier = Modifier.height(380.dp).fillMaxWidth().padding(horizontal = Space.Screen)) {
             LazyColumn(
-                modifier = Modifier.height(380.dp).fillMaxWidth().padding(horizontal = Space.Screen),
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
             ) {
                 items(lines.size) { index ->
@@ -3586,6 +3594,9 @@ private fun GroupLogPage(
                             text = line.text,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
+                                .pointerInput(line.seq) {
+                                    detectTapGestures(onLongPress = { replyTo = line })
+                                }
                                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
                                 .background(
                                     if (fromMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
@@ -3596,7 +3607,35 @@ private fun GroupLogPage(
                     }
                 }
             }
+                val total = listState.layoutInfo.totalItemsCount
+                val visible = listState.layoutInfo.visibleItemsInfo.size
+                if (total > visible && visible > 0) {
+                    val ratio = visible.toFloat() / total
+                    val thumb = (360.dp * ratio).coerceAtLeast(40.dp)
+                    val maxScroll = (total - visible).coerceAtLeast(1)
+                    val frac = listState.firstVisibleItemIndex.toFloat() / maxScroll
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 2.dp)
+                            .width(4.dp)
+                            .height(thumb)
+                            .offset(y = ((360.dp - thumb) * frac.coerceIn(0f, 1f)))
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)),
+                    )
+                }
+            }
 
+            replyTo?.let { r ->
+                Text(
+                    text = "回复 " + r.from + "：" + r.text.take(12) + "  ·  点右侧 × 取消",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = Space.Screen, bottom = 2.dp)
+                        .clickable { replyTo = null },
+                )
+            }
             if (atTarget != null) {
                 Text(
                     text = "@" + atTarget + "  ·  点右侧 × 取消",
@@ -3626,13 +3665,15 @@ private fun GroupLogPage(
                         draft = ""
                         scope.launch {
                             val seq = (lines.maxOfOrNull { it.seq } ?: 0) + 1
-                            val toPart = atTarget?.let { com.simplechat.app.data.GroupRules.escPublic(it) } ?: "null"
+                            val target = atTarget ?: replyTo?.from
+                            val toPart = target?.let { com.simplechat.app.data.GroupRules.escPublic(it) } ?: "null"
                             val line = "{\"seq\":" + seq +
                                 ",\"ts\":\"" + java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date()) +
-                                "\",\"from\":\"大馋鬼\",\"to\":null,\"text\":" +
+                                "\",\"from\":\"大馋鬼\",\"to\":" + toPart + ",\"text\":" +
                                 org.json.JSONObject.quote(text) + ",\"kind\":\"say\"}"
                             store.appendGroupLine(uriString, line)
                             atTarget = null
+                            replyTo = null
                             load(uriString)
                         }
                     },
