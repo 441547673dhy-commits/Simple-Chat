@@ -3650,7 +3650,11 @@ private fun GroupLogPage(
                             .padding(end = 2.dp)
                             .width(14.dp)
                             .height(thumb)
-                            .offset(y = ((360.dp - thumb) * frac.coerceIn(0f, 1f)))
+                            // 留 14dp 余量：拉到最底时不贴到屏幕/输入框边上（他 2026-11-23 反馈）
+                            .offset(
+                                y = (((360.dp - thumb) > 14.dp)
+                                    .let { if (it) (360.dp - thumb - 14.dp) * frac.coerceIn(0f, 1f) else 0.dp }),
+                            )
                             .draggable(
                                 state = dragState,
                                 orientation = androidx.compose.foundation.gestures.Orientation.Vertical,
