@@ -1829,7 +1829,7 @@ private fun DataPage(
      */
     SettingsSectionLabel(stringResource(R.string.settings_group_diagnostics))
 
-        SettingsCard {
+    SettingsCard {
         SettingsActionRow(
             label = "导出用量流水",
             hint = "每次请求的 token 与估算费用（csv），用来跟平台账单对账",
@@ -1845,7 +1845,6 @@ private fun DataPage(
             },
         )
         RowDivider()
-SettingsCard {
         SettingsActionRow(
             label = "测试 tools 支持",
             hint = "发一个带工具声明的请求，看通道认不认 function calling",
