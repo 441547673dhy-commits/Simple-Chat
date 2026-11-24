@@ -18,19 +18,34 @@ import java.util.Locale
  */
 object GroupSyncLog {
 
-    /** 把任意文本写到 下载/DSH-Go/（成员表这类"要能搬走的配置"用）。 */
-    fun writeTextFile(context: Context, fileName: String, content: String) {
-        runCatching {
+    /**
+     * 把任意文本写到 下载/DSH-Go/（成员表、用量流水这类"要能搬走的配置"用）。
+     *
+     * 返回**是否真的写成功**：以前返回 Unit，失败了界面照样说"已导出"，
+     * 我去下载目录找不到文件才发现是安静失败（2026-11-25 导出用量流水那次）。
+     */
+    fun writeTextFile(context: Context, fileName: String, content: String): Boolean {
+        return runCatching {
             val resolver = context.contentResolver
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                // 后缀跟 MIME 对得上，下载目录才不会把它当"损坏的 json"
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeOf(fileName))
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/DSH-Go")
             }
             val target = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: return@runCatching
-            resolver.openOutputStream(target, "w")?.use { it.write(content.toByteArray()) }
-        }
+                ?: return@runCatching false
+            val out = resolver.openOutputStream(target, "w") ?: return@runCatching false
+            out.use { it.write(content.toByteArray()) }
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun mimeOf(fileName: String): String = when (fileName.substringAfterLast('.', "").lowercase()) {
+        "csv" -> "text/csv"
+        "md" -> "text/markdown"
+        "txt" -> "text/plain"
+        else -> "application/json"
     }
 
     fun write(

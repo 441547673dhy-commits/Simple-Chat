@@ -509,6 +509,16 @@ class SettingsStore(
         preferences.edit { it[Keys.CONTEXT_TAIL] = value.coerceAtLeast(0) }
     }
 
+    /**
+     * 窗口条数。见 [StoredSettings.windowMaxCount]。
+     *
+     * 为什么要能调（他 2026-11-25 定）：全史直发时 3号 一轮就是 66 万 token，
+     * 2号 估算 75 万、真实可能贴到 1M 上限。得给他一个能踩刹车的档位。
+     */
+    suspend fun setWindowMaxCount(value: Int) {
+        preferences.edit { it[Keys.WINDOW_MAX_COUNT] = value.coerceAtLeast(0) }
+    }
+
     /** 群聊预算。见 [StoredSettings.groupBudgetChars]。 */
     suspend fun setGroupBudgetChars(value: Int) {
         preferences.edit { it[Keys.GROUP_BUDGET] = value.coerceAtLeast(0) }

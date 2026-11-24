@@ -281,11 +281,15 @@ fun SettingsScreen(
                 context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             }.getOrNull()
             if (bytes == null) {
-                android.widget.Toast.makeText(context, "读不到文件", android.widget.Toast.LENGTH_SHORT).show()
+                context.toastMain("读不到文件")
                 return@launch
             }
-            val n = com.simplechat.app.data.MemoryPack.import(context, bytes)
-            android.widget.Toast.makeText(context, "已导入 " + n + " 段", android.widget.Toast.LENGTH_LONG).show()
+            val n = runCatching { com.simplechat.app.data.MemoryPack.import(context, bytes) }
+                .getOrElse { e ->
+                    context.toastMain("导入失败：" + (e.message ?: e.javaClass.simpleName), long = true)
+                    return@launch
+                }
+            context.toastMain("已导入 " + n + " 段", long = true)
         }
     }
 
@@ -828,6 +832,13 @@ fun SettingsScreen(
                                 val idx = steps.indexOf(stored.contextTailChars).takeIf { it >= 0 } ?: 3
                                 scope.launch { store.setContextTailChars(steps[(idx + 1) % steps.size]) }
                             },
+                            windowMaxCount = stored.windowMaxCount,
+                            onCycleWindowCount = {
+                                // 档位从「省」到「全史」；0 = 退回字符预算那条路
+                                val steps = listOf(600, 1000, 1500, 2000, 2500, 3000, 4000, 0)
+                                val idx = steps.indexOf(stored.windowMaxCount).takeIf { it >= 0 } ?: 5
+                                scope.launch { store.setWindowMaxCount(steps[(idx + 1) % steps.size]) }
+                            },
                             memoryOn = stored.memoryEnabled,
                             memoryKeySet = memoryKeySet,
                             onToggleMemory = {
@@ -846,30 +857,35 @@ fun SettingsScreen(
                             },
                             onExportTodos = {
                                 scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    val f = com.simplechat.app.data.TodoExtractor.file(context)
-                                    if (!f.exists()) {
-                                        android.widget.Toast.makeText(context, "还没有抽取过", android.widget.Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        com.simplechat.app.data.GroupSyncLog.writeTextFile(context, "待办-自动.md", f.readText())
-                                        android.widget.Toast.makeText(context, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
+                                    val msg = runCatching {
+                                        val f = com.simplechat.app.data.TodoExtractor.file(context)
+                                        if (!f.exists()) "还没有抽取过"
+                                        else {
+                                            val ok = com.simplechat.app.data.GroupSyncLog
+                                                .writeTextFile(context, "待办-自动.md", f.readText())
+                                            if (ok) "已导出到 下载/DSH-Go/" else "写不进去（下载目录被限制？）"
+                                        }
+                                    }.getOrElse { "导出失败：" + (it.message ?: it.javaClass.simpleName) }
+                                    context.toastMain(msg)
                                 }
                             },
                             onSetMemoryKey = { showMemoryKeyDialog = true },
                             onImportPack = { packPicker.launch(arrayOf("application/octet-stream", "*/*")) },
                             onExportUsage = {
                                 scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    val f = com.simplechat.app.data.UsageLog.file(context)
-                                    if (!f.exists()) {
-                                        android.widget.Toast.makeText(context, "还没有记录", android.widget.Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
-                                            .format(java.util.Date())
-                                        com.simplechat.app.data.GroupSyncLog.writeTextFile(
-                                            context, "用量-" + stamp + ".csv", f.readText(),
-                                        )
-                                        android.widget.Toast.makeText(context, "已导出到 下载/DSH-Go/", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
+                                    val msg = runCatching {
+                                        val f = com.simplechat.app.data.UsageLog.file(context)
+                                        if (!f.exists()) "还没有记录"
+                                        else {
+                                            val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+                                                .format(java.util.Date())
+                                            val name = "用量-" + stamp + ".csv"
+                                            val ok = com.simplechat.app.data.GroupSyncLog
+                                                .writeTextFile(context, name, f.readText())
+                                            if (ok) "已导出：下载/DSH-Go/" + name else "写不进去（下载目录被限制？）"
+                                        }
+                                    }.getOrElse { "导出失败：" + (it.message ?: it.javaClass.simpleName) }
+                                    context.toastMain(msg, long = true)
                                 }
                             },
                             onTestTools = {
@@ -1754,6 +1770,8 @@ private fun DataPage(
     onToggleReasonBack: () -> Unit = {},
     contextTail: Int = 30_000,
     onCycleContextTail: () -> Unit = {},
+    windowMaxCount: Int = 3000,
+    onCycleWindowCount: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
     onUnbindLog: () -> Unit = {},
 ) {
@@ -1885,6 +1903,16 @@ private fun DataPage(
                     else "${recentBudgetChars / 10_000} 万字符") +
                 " · 点按切换（越大记得越远、越贵越慢）",
             onClick = onCycleBudget,
+        )
+        /*
+         * 窗口条数：开着「只发送最近内容」时，真正决定发多少条的是它，
+         * 「发送预算」那栏在这条路上不生效（他 2026-11-25 验证过）。
+         */
+        SettingsActionRow(
+            label = "窗口条数",
+            hint = (if (windowMaxCount <= 0) "不限（按字符预算走）" else "$windowMaxCount 条") +
+                " · 全史直发时每条鱼约 45–75 万 token，调小能省能快",
+            onClick = onCycleWindowCount,
         )
     }
 
@@ -3878,5 +3906,23 @@ private fun GroupLogPage(
                 ) { Text("发送") }
             }
         }
+    }
+}
+
+/**
+ * 后台线程弹 Toast 会崩：Toast 内部要建 Handler，而后台线程没有 Looper，
+ * 直接抛 `Can't create handler inside thread ... Looper.prepare()`。
+ * 2026-11-25「导出用量流水」点了就闪退，就是把这句写在了 `Dispatchers.IO` 里。
+ *
+ * 以后所有"后台干完活再告诉用户"的地方都走这里：统一投到主线程再弹。
+ */
+private fun android.content.Context.toastMain(text: String, long: Boolean = false) {
+    val app = applicationContext
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+        android.widget.Toast.makeText(
+            app,
+            text,
+            if (long) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT,
+        ).show()
     }
 }
