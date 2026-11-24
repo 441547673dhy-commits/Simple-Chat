@@ -2299,14 +2299,12 @@ class ChatViewModel(
         skippedNoVision = 0; skippedUnreadable = 0
         val request = mutableListOf<OutMessageDto>()
 
-        val system = buildString {
-            val core = personaAndPresets()
-            if (core.isNotEmpty()) {
-                append(core)
-                appendLine().appendLine()
-            }
-            append(currentTimeLine())
-        }
+        /*
+         * 系统提示词必须**稳定**：它一变，后面整段历史的缓存全部失效。
+         * 所以时间、补段、检索这些"每轮都变"的内容不放在这里（见 volatileTail）。
+         */
+        val volatileTail = StringBuilder()
+        val system = personaAndPresets()
         if (system.isNotBlank()) {
             request += OutMessageDto(role = "system", content = MessageContent.text(system))
         }
@@ -2356,19 +2354,13 @@ class ChatViewModel(
                     ).substringBefore('-').takeIf { it.isNotBlank() && it != "未绑定" }
                 val hits = pack.search(vec, owner, snapshot.memoryTopK, question)
                 if (hits.isEmpty()) return@runCatching
-                request += OutMessageDto(
-                    role = "system",
-                    content = MessageContent.text(
-                        buildString {
-                            appendLine("【旧记忆】以下是按当前话题从更早的记录里找出来的，可能相关也可能不相关：")
-                            appendLine("（用法：自然想起就用，不要念出处，不要逐字复述。）")
-                            hits.forEach { h ->
-                                appendLine()
-                                appendLine("【" + pack.timestamps[h.index].take(10) + "】" + pack.textAt(h.index).take(600))
-                            }
-                        },
-                    ),
-                )
+                volatileTail.appendLine("【旧记忆】以下是按当前话题从更早的记录里找出来的，可能相关也可能不相关：")
+                volatileTail.appendLine("（用法：自然想起就用，不要念出处，不要逐字复述。）")
+                hits.forEach { h ->
+                    volatileTail.appendLine()
+                    volatileTail.appendLine("【" + pack.timestamps[h.index].take(10) + "】" + pack.textAt(h.index).take(600))
+                }
+                volatileTail.appendLine()
             }
         }
         val reasonBack = settingsStore.reasonBackFor(currentConversationId)
@@ -2398,19 +2390,17 @@ class ChatViewModel(
                 used += cost
             }
             if (picked.isNotEmpty()) {
-                request += OutMessageDto(
-                    role = "system",
-                    content = MessageContent.text(
-                        "更早的对话（节选，续在下面这段历史之前）：\n" +
-                            picked.joinToString("\n") { m ->
-                                (if (m.role == MessageRole.USER) "他：" else "她：") +
-                                    m.content.take(1200)
-                            },
-                    ),
+                volatileTail.appendLine("更早的对话（节选，在这段历史之前）：")
+                volatileTail.appendLine(
+                    picked.joinToString("\n") { m ->
+                        (if (m.role == MessageRole.USER) "他：" else "她：") + m.content.take(1200)
+                    },
                 )
+                volatileTail.appendLine()
             }
         }
-        outgoingList.forEach { message ->
+        val lastUserIndex = outgoingList.indexOfLast { it.role == MessageRole.USER }
+        outgoingList.forEachIndexed { index, message ->
             /*
              * 空消息不发：历史里出错/被中断的 assistant、既没正文也没附件的 user
              * 是可能存在的，而部分兼容网关对空 `content` 直接 400 ——
@@ -2442,7 +2432,12 @@ class ChatViewModel(
                  * 在协议里是不合法的（会 400），而 AI 回复本来也不该带图。
                  */
                 content = if (message.role != MessageRole.USER || message.attachments.isEmpty()) {
-                    MessageContent.text(timed(message.content, message.createdAt))
+                    MessageContent.text(
+                        timed(message.content, message.createdAt) + if (index == lastUserIndex) {
+                            // 易变内容挂在**最后一条用户消息**上：这样历史前缀保持不变，缓存能命中
+                            "\n\n" + currentTimeLine() + "\n\n" + volatileTail.toString().trimEnd()
+                        } else "",
+                    )
                 } else {
                     userContent(outgoing.content, outgoing.attachments)
                 },
