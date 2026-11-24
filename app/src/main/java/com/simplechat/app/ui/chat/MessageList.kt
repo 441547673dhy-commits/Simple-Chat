@@ -141,6 +141,9 @@ fun MessageList(
     onEdit: (UiMessage) -> Unit = {},
     onFork: (UiMessage) -> Unit = {},
     onDelete: (UiMessage) -> Unit = {},
+    /** 被钉住的消息 id（永不淘汰出窗口）。 */
+    pinnedIds: Set<String> = emptySet(),
+    onTogglePin: (UiMessage) -> Unit = {},
     /** 批量删除的多选模式：点消息 = 选它（首点定起点，再点定终点，中间全选）。 */
     bulkMode: Boolean = false,
     bulkSelected: Set<String> = emptySet(),
@@ -1117,6 +1120,12 @@ private fun MessageActions(
                 )
             }
         }
+        ActionIcon(
+            AppIcons.Pin,
+            if (message.id in pinnedIds) "取消钉住（不再永远保留）" else "钉住（永远留在窗口里）",
+            onTogglePin,
+            colors,
+        )
         ActionIcon(AppIcons.Edit, stringResource(R.string.action_edit), onEdit, colors)
         ActionIcon(AppIcons.Trash, stringResource(R.string.action_delete), onDelete, colors)
 

@@ -465,6 +465,23 @@ class SettingsStore(
         if (conversationId.isNullOrBlank()) false
         else preferences.data.first()[booleanPreferencesKey("memory_cross_$conversationId")] ?: false
 
+    /** 钉住的消息 id（按会话）。被钉的永不淘汰。 */
+    suspend fun pinnedIdsFor(conversationId: String?): Set<String> {
+        if (conversationId.isNullOrBlank()) return emptySet()
+        val raw = preferences.data.first()[stringPreferencesKey("pinned_$conversationId")] ?: ""
+        return raw.split(',').filter { it.isNotBlank() }.toSet()
+    }
+
+    suspend fun togglePinned(conversationId: String?, messageId: String): Boolean {
+        if (conversationId.isNullOrBlank()) return false
+        val cur = pinnedIdsFor(conversationId).toMutableSet()
+        val nowPinned = if (messageId in cur) { cur.remove(messageId); false } else { cur.add(messageId); true }
+        preferences.edit {
+            it[stringPreferencesKey("pinned_$conversationId")] = cur.joinToString(",")
+        }
+        return nowPinned
+    }
+
     suspend fun setMemoryCrossRole(conversationId: String?, value: Boolean) {
         if (conversationId.isNullOrBlank()) return
         preferences.edit { it[booleanPreferencesKey("memory_cross_$conversationId")] = value }

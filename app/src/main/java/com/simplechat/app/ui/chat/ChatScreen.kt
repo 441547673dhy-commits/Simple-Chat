@@ -1341,6 +1341,8 @@ fun ChatScreen(
                             }
                         },
                         onDelete = { message -> deleteTarget = message },
+                        pinnedIds = vm.pinnedIds,
+                        onTogglePin = { message -> vm.togglePin(message.id) },
                         onFork = { message -> vm.forkFrom(message) },
                         onVariantChange = { message, index ->
                             // 切版本也重建路径（旧分支下游让位）—— 锚住操作栏那一行，

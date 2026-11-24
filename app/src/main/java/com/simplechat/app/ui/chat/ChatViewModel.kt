@@ -526,6 +526,7 @@ class ChatViewModel(
         // 换会话 = 换一轮上下文：上一轮的用量与缓存命中率不再适用
         lastUsage = null
         // 标题立刻开始观察；下面那句清空只是防止旧标题残留一帧
+        viewModelScope.launch { pinnedIds = settingsStore.pinnedIdsFor(id) }
         observeTitle(id)
         switching = true
         compaction = null
@@ -1023,6 +1024,10 @@ class ChatViewModel(
      */
     var lastUsage by mutableStateOf<RequestUsage?>(null)
 
+    /** 当前会话里被钉住的消息 id（永不淘汰）。 */
+    var pinnedIds by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     /** 记忆包缓存（首次用时加载，30MB，只读）。 */
     private var memoryPack: com.simplechat.app.data.MemoryPack? = null
     private val embeddingApi = com.simplechat.app.net.EmbeddingApi()
@@ -1040,6 +1045,62 @@ class ChatViewModel(
      * 只在开关注释允许时跑；用"他最后一条消息 + 她这次的回复"，几百 token。
      * 失败静默 —— 这是附加功能，不该影响对话。
      */
+    /**
+     * 按重要度保留窗口内消息。
+     *
+     * 规则（他定的）：超过 [maxCount] 时，只从**最旧的 500 条**里淘汰评分最低的 200 条；
+     * 钉住的永不淘汰。返回按时间顺序的消息列表。
+     */
+    private fun selectByImportance(
+        list: List<UiMessage>,
+        maxCount: Int,
+        pinned: Set<String>,
+    ): List<UiMessage> {
+        if (list.size <= maxCount) return list
+        val headSize = 500
+        val evictCount = 200
+        val head = list.take(minOf(headSize, list.size))
+        val rest = list.drop(head.size)
+        val evict = head
+            .filter { it.id !in pinned }
+            .sortedBy { importanceOf(it) }
+            .take(evictCount)
+            .map { it.id }
+            .toSet()
+        return head.filter { it.id !in evict } + rest
+    }
+
+    /** 一条消息的"重要度"（纯文本口径，越高越不容易被淘汰）。 */
+    private fun importanceOf(m: UiMessage): Int {
+        val t = m.content
+        var s = 0
+        // 情绪 / 约定 / 亲密：她最容易"记住"的
+        listOf("心疼", "别怕", "答应", "说好", "约定", "抱", "亲", "难受", "害怕", "记得").forEach {
+            if (t.contains(it)) s += 3
+        }
+        // 健康与身体
+        listOf("体重", "尿酸", "体检", "热量", "脂肪肝", "公斤").forEach {
+            if (t.contains(it)) s += 2
+        }
+        // 他下的指令
+        listOf("你要", "必须", "记住", "别忘", "不准").forEach {
+            if (t.contains(it)) s += 2
+        }
+        // 技术细节：最容易被淘汰
+        listOf("代码", "接口", "部署", "模型", "api", "配置", "服务器").forEach {
+            if (t.lowercase().contains(it)) s += 1
+        }
+        return s + minOf(t.length / 500, 2)
+    }
+
+    /** 钉住/取消钉住一条消息。 */
+    fun togglePin(messageId: String) {
+        viewModelScope.launch {
+            settingsStore.togglePinned(currentConversationId, messageId)
+            pinnedIds = settingsStore.pinnedIdsFor(currentConversationId)
+        }
+    }
+
     private fun maybeExtractTodo(reply: String) {
         val ctx = appContext ?: return
         val userSaid = messages.lastOrNull { it.role == MessageRole.USER }?.content ?: return
@@ -2366,7 +2427,19 @@ class ChatViewModel(
         val reasonBack = settingsStore.reasonBackFor(currentConversationId)
         val recentOnly = snapshot.recentOnly
         val fullList = orderedOutgoingMessages(messages, active)
-        val outgoingList = if (recentOnly) {
+        /*
+         * 窗口筛选（他 2026-11-25 的方案：按**条数**，按**重要度**淘汰）。
+         *
+         * - 没超过 windowMaxCount：全部发。
+         * - 超过：从**最旧的 500 条**里按评分踢掉 200 条，其余照发（≈2800 条在场）。
+         * - 钉住的消息评分极高，永远不会被踢。
+         *
+         * 评分只看文本（情绪/约定/亲密 > 健康 > 指令 > 技术 > 日常），
+         * 不涉及时间单位 —— 他明确要求用文本口径。
+         */
+        val outgoingList = if (snapshot.windowMaxCount > 0 && recentOnly) {
+            selectByImportance(fullList, snapshot.windowMaxCount, pinnedIds)
+        } else if (recentOnly) {
             trimToRecentBudget(fullList, cappedBudget(snapshot.recentBudgetChars))
         } else fullList
 
