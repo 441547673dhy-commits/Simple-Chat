@@ -2480,7 +2480,31 @@ class ChatViewModel(
              * 一条空消息不值得让整段历史发不出去（见 `isSendableOutgoing`）。
              */
             var outgoing = if (message.role == MessageRole.USER && message.attachments.isNotEmpty()) {
-                message.copy(attachments = outgoingAttachments(message.attachments))
+                /*
+                 * 历史图片不再每轮重传（他 2026-11-25 定的）。
+                 *
+                 * 理由：图里的信息早就被她**当年的文字回复**承载了，重看像素不会让她更懂，
+                 * 只会更贵、更慢、更贴 1M 上限（3号 一份会话里 255 张图，每次重传都是白付）。
+                 * 所以只有**最后一条用户消息**的图真的发；更早的降级成「[图片×N]」占位，
+                 * 她仍然知道"那时候他发过图"。
+                 *
+                 * 模型不支持看图时保持原样（整条丢掉，不写占位）—— 她本来就看不了，
+                 * 写了占位反而会让她说"图打不开"。
+                 */
+                val keepImages = index == lastUserIndex && settings.model.supportsVision
+                if (keepImages) {
+                    message.copy(attachments = outgoingAttachments(message.attachments))
+                } else if (settings.model.supportsVision) {
+                    val imageCount = message.attachments.count { it.isImage }
+                    message.copy(
+                        attachments = emptyList(),
+                        content = if (imageCount > 0) {
+                            message.content + (if (message.content.isBlank()) "" else "\n") + "[图片×" + imageCount + "]"
+                        } else message.content,
+                    )
+                } else {
+                    message.copy(attachments = outgoingAttachments(message.attachments))
+                }
             } else message
             /*
              * 会话级「回传思考」：把这条 assistant 当年的思考附在正文前。
