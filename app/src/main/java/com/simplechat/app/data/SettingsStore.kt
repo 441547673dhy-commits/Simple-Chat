@@ -202,6 +202,9 @@ data class StoredSettings(
      */
     val groupShowThinking: Boolean = false,
 
+    /** 窗口按**条数**算（他 2026-11-25 定：3000 条），0 = 沿用字符预算。 */
+    val windowMaxCount: Int = 3000,
+
     /**
      * 记忆检索（向量）。默认**关**——它要调外部向量服务、并把一段对话发出去。
      * 他 2026-11-23 定的规矩：有影响的功能默认关。
@@ -465,12 +468,6 @@ class SettingsStore(
     suspend fun memoryCrossRoleFor(conversationId: String?): Boolean =
         if (conversationId.isNullOrBlank()) false
         else preferences.data.first()[booleanPreferencesKey("memory_cross_$conversationId")] ?: false
-
-    /**
-     * 窗口按**条数**算（他的方案：3000 条），0 = 沿用字符预算。
-     * 条数是"她有几句话在场"，字符是"占多少内存"——他要求用文本单位。
-     */
-    val windowMaxCount: Int = 3000,
 
     /** 钉住的消息 id（按会话）。被钉的永不淘汰。 */
     suspend fun pinnedIdsFor(conversationId: String?): Set<String> {
