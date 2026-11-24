@@ -959,6 +959,7 @@ class SettingsStore(
         val MEMORY_MODEL = stringPreferencesKey("memory_model")
         val MEMORY_KEY_ENC = stringPreferencesKey("memory_key_enc")
         val MEMORY_TOPK = intPreferencesKey("memory_topk")
+        val WINDOW_MAX_COUNT = intPreferencesKey("window_max_count")
         val TODO_EXTRACT = booleanPreferencesKey("todo_extract")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")

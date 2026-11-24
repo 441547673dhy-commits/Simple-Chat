@@ -271,6 +271,8 @@ fun MessageList(
             val sharedGroup = shareGroupByMessage[message.id]
             val row: @Composable () -> Unit = {
             MessageRow(
+                pinned = message.id in pinnedIds,
+                onTogglePin = { onTogglePin(message) },
                 message = message,
                 search = searchTarget?.takeIf { it.messageId == message.id },
                 onDismissSearch = onDismissSearch,
@@ -377,6 +379,9 @@ private fun MessageRow(
     onEdit: () -> Unit,
     onFork: () -> Unit,
     onDelete: () -> Unit,
+    /** 这条是否被钉住（永不淘汰）。 */
+    pinned: Boolean,
+    onTogglePin: () -> Unit,
     onBulkStart: () -> Unit = {},
     onVariantChange: (Int) -> Unit,
     onOpenImage: (Attachment) -> Unit,
@@ -577,8 +582,8 @@ private fun MessageRow(
                 onContinue = onContinue,
                 onSpeak = onSpeak,
                 onEdit = onEdit,
-                pinned = message.id in pinnedIds,
-                onTogglePin = { onTogglePin(message) },
+                pinned = pinned,
+                onTogglePin = onTogglePin,
                 onDelete = onDelete,
                 onVariantChange = onVariantChange,
             )
