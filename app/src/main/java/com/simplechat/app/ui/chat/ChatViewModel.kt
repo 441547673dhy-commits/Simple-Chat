@@ -2421,7 +2421,7 @@ class ChatViewModel(
                     )
                 }
             }
-            if (!isSendableOutgoing(outgoing)) return@forEach
+            if (!isSendableOutgoing(outgoing)) return@forEachIndexed
             request += OutMessageDto(
                 role = if (message.role == MessageRole.USER) "user" else "assistant",
                 /*
