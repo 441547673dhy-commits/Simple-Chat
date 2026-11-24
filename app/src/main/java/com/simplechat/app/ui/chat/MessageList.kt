@@ -1080,6 +1080,8 @@ private fun MessageActions(
     onContinue: () -> Unit,
     onSpeak: () -> Unit,
     onEdit: () -> Unit,
+    pinned: Boolean,
+    onTogglePin: () -> Unit,
     onDelete: () -> Unit,
     onVariantChange: (Int) -> Unit,
 ) {
