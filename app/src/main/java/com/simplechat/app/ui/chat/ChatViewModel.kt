@@ -86,15 +86,15 @@ private const val WarmTailMessages = 10
 private const val WarmTailMaxChars = 24_000
 
 /**
- * 本地估算 token 与**服务端真实 token** 的比例（实测，2026-11-25）。
+ * 本地估算 token 与服务端真实 token 的比例。
  *
- * 实测数据：3号 一整段会话本地估算 45.4 万，服务端账单口径 **66.2 万 = 1.46 倍**。
- * 原因是中文标点、Markdown、换行、emoji 比公式里"1.5 字符 1 token"贵得多。
+ * 2026-11-25 的两个数据点：
+ * - 3号 圆环（未乘系数）663k vs 服务端实际 661,915 → **本来就准**，比例 ≈ 1.00
+ * - 我一度按"文件字数估 45 万"去算，得出 1.45，那个基数是错的，已撤回
  *
- * 圆环的用途是"会不会撞窗口上限"，所以宁可高估：取 1.45。
- * 有新的实测就改这一个数。
+ * 所以在没有新实测之前保持 1.0。要校准时改这一个数。
  */
-private const val TOKEN_ESTIMATE_FACTOR = 1.45
+private const val TOKEN_ESTIMATE_FACTOR = 1.0
 
 /**
  * 「只发最近内容」时允许发送的字符预算，约 4 万 token。
@@ -1063,23 +1063,35 @@ class ChatViewModel(
      * 规则（他定的）：超过 [maxCount] 时，只从**最旧的 500 条**里淘汰评分最低的 200 条；
      * 钉住的永不淘汰。返回按时间顺序的消息列表。
      */
+    /**
+     * 按重要度保留窗口内消息。
+     *
+     * 规则（他定的：超过上限时，从**最旧的那段**里淘汰评分最低的，钉住的永不淘汰）。
+     *
+     * 2026-11-25 修了两个 bug：
+     * 1. 以前不管设多少条，都只从最旧 500 里固定踢 200 —— 设 1500 条实际还剩 2624 条，
+     *    这个设置等于摆设，窗口能一路涨到 1.2M token（超过 1M 上限）。
+     *    现在按 [maxCount] 真正腾出 `size - maxCount` 条。
+     * 2. 候选区也要跟着变大（最旧的 500 + 要腾的条数），否则腾不出足够条数。
+     */
     private fun selectByImportance(
         list: List<UiMessage>,
         maxCount: Int,
         pinned: Set<String>,
     ): List<UiMessage> {
         if (list.size <= maxCount) return list
-        val headSize = 500
-        val evictCount = 200
+        val over = list.size - maxCount
+        val headSize = 500 + over
         val head = list.take(minOf(headSize, list.size))
-        val rest = list.drop(head.size)
         val evict = head
             .filter { it.id !in pinned }
             .sortedBy { importanceOf(it) }
-            .take(evictCount)
+            .take(over)
             .map { it.id }
             .toSet()
-        return head.filter { it.id !in evict } + rest
+        // 全被钉住时踢不动，就原样发（宁可超，也不偷偷丢钉子）
+        if (evict.isEmpty()) return list
+        return list.filter { it.id !in evict }
     }
 
     /** 一条消息的"重要度"（纯文本口径，越高越不容易被淘汰）。 */
@@ -2452,7 +2464,7 @@ class ChatViewModel(
          * 窗口筛选（他 2026-11-25 的方案：按**条数**，按**重要度**淘汰）。
          *
          * - 没超过 windowMaxCount：全部发。
-         * - 超过：从**最旧的 500 条**里按评分踢掉 200 条，其余照发（≈2800 条在场）。
+         * - 超过：从**最旧的那段**里按评分踢到刚好装得下（腾出 超出条数）。
          * - 钉住的消息评分极高，永远不会被踢。
          *
          * 评分只看文本（情绪/约定/亲密 > 健康 > 指令 > 技术 > 日常），
@@ -2467,13 +2479,17 @@ class ChatViewModel(
         /*
          * 窗口外补段（"锚点跟着边界走"）。
          *
-         * 预算裁掉的那部分历史里，**紧贴窗口的那一段**才是她缺失的记忆；
-         * 越靠前越久远，价值越低。所以取被裁部分的**尾部**若干字符，
-         * 以 system 身份插在历史之前 —— 她的连续记忆因此比预算更长，
-         * 而且永远不会和窗口内的内容重复（那是两段不同的历史）。
+         * 只对**字符预算模式**有意义：那时裁掉的是连续的一大段尾巴，取它的尾部正好紧贴窗口。
+         *
+         * ⚠️ 2026-11-25 的事故（他抓到的"她回复我很久以前的玩笑"）：
+         * 条数模式下，被淘汰的是**整个会话最旧的 200 条**，不是贴着窗口的那一段。
+         * 补段照样把 `dropped` 的尾部取出来、并且接在**他最后一句话后面**，
+         * 于是 10-26 的一句旧玩笑（第 199 条，"99 公斤快速减到 4 的好方法"）
+         * 变成了"最新内容"，2号 顺着它回话 —— 她的思考里写着"他那句'减到4'"。
+         * 所以条数模式一律不补段：那时窗口里本来就是全史，没有"窗口外"可言。
          */
         val tailBudget = snapshot.contextTailChars
-        if (recentOnly && tailBudget > 0 && outgoingList.size < fullList.size) {
+        if (recentOnly && tailBudget > 0 && snapshot.windowMaxCount <= 0 && outgoingList.size < fullList.size) {
             val dropped = fullList.subList(0, fullList.size - outgoingList.size)
             val picked = ArrayDeque<UiMessage>()
             var used = 0
