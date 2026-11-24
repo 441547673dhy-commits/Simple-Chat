@@ -86,6 +86,17 @@ private const val WarmTailMessages = 10
 private const val WarmTailMaxChars = 24_000
 
 /**
+ * 本地估算 token 与**服务端真实 token** 的比例（实测，2026-11-25）。
+ *
+ * 实测数据：3号 一整段会话本地估算 45.4 万，服务端账单口径 **66.2 万 = 1.46 倍**。
+ * 原因是中文标点、Markdown、换行、emoji 比公式里"1.5 字符 1 token"贵得多。
+ *
+ * 圆环的用途是"会不会撞窗口上限"，所以宁可高估：取 1.45。
+ * 有新的实测就改这一个数。
+ */
+private const val TOKEN_ESTIMATE_FACTOR = 1.45
+
+/**
  * 「只发最近内容」时允许发送的字符预算，约 4 万 token。
  *
  * 取值参照：一轮正常对话的原文在 1–2 KB，4 万 token 大约覆盖最近一百来条，
@@ -383,6 +394,7 @@ class ChatViewModel(
                     // snapshotFlow 的块不是 suspend，不能在这里 first()；
                     // `stored` 是已收集好的整份设置，直接读它。
                     stored.recentBudgetChars,
+                    stored.windowMaxCount,
                 )
             }
                 .collectLatest { input ->
@@ -1178,12 +1190,14 @@ class ChatViewModel(
         val presets: List<Preset>,
         val compaction: CompactionEntity?,
         val budgetChars: Int,
+        val windowMaxCount: Int,
     ) {
         private val size = messages.size
         private val idsHash = messages.fold(0) { acc, m -> acc * 31 + m.id.hashCode() }
         private val lastHash = messages.lastOrNull()?.let { it.content.hashCode() * 31 + it.status.hashCode() } ?: 0
         private val settingsPart = settings.hashCode() * 31 + presets.size
-        private val compactionPart = (compaction?.summary?.length ?: 0) * 31 + budgetChars
+        private val compactionPart =
+            (compaction?.summary?.length ?: 0) * 31 + budgetChars * 31 + windowMaxCount
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -1213,12 +1227,19 @@ class ChatViewModel(
 
         // —— 实际会发给 API 的部分 ——
         val system = settings.composedSystemPrompt(presets)
-        // 与真正发出去的内容保持一致：开了「只发送最近内容」就按同样的预算裁剪，
+        // 与真正发出去的内容保持一致：开了「只发送最近内容」就按同样的规则裁剪，
         // 否则圆环显示 668k、实际只发 30k，看起来像"她又满了"（会误导判断）
         val outgoing = orderedOutgoingMessages(messages, active).let { list ->
-            if (stored.recentOnly) {
-                trimToRecentBudget(list, cappedBudget(input.budgetChars))
-            } else list
+            when {
+                !stored.recentOnly -> list
+                /*
+                 * 条数模式必须跟发送路径同一套算法（b117 起）。
+                 * 2026-11-25 的 bug：圆环只认字符预算，显示 67k，实际发出去 66.2 万 ——
+                 * 差 10 倍，他看圆环完全判断不了"会不会超窗口"。
+                 */
+                input.windowMaxCount > 0 -> selectByImportance(list, input.windowMaxCount, pinnedIds)
+                else -> trimToRecentBudget(list, cappedBudget(input.budgetChars))
+            }
         }
         val inContext = buildList {
             if (system.isNotBlank()) add(system)
@@ -1236,7 +1257,7 @@ class ChatViewModel(
         val thinking = messages.mapNotNull { it.reasoningSeconds }
 
         return ContextStats(
-            usedTokens = TokenEstimate.ofAll(inContext) + attachmentTokens,
+            usedTokens = ((TokenEstimate.ofAll(inContext) + attachmentTokens) * TOKEN_ESTIMATE_FACTOR).toInt(),
             windowTokens = settings.model.contextWindow,
             messageCount = messages.size,
             totalTokens = TokenEstimate.ofAll(allTexts),
