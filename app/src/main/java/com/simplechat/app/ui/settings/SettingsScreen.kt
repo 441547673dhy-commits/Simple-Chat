@@ -830,6 +830,10 @@ fun SettingsScreen(
                                 scope.launch { store.setMemoryEnabled(!stored.memoryEnabled) }
                             },
                             todoExtractOn = stored.todoExtract,
+                            memoryCrossOn = stored.memoryCrossRole,
+                            onToggleMemoryCross = {
+                                scope.launch { store.setMemoryCrossRole(!stored.memoryCrossRole) }
+                            },
                             onToggleTodoExtract = {
                                 scope.launch { store.setTodoExtract(!stored.todoExtract) }
                             },
@@ -1735,6 +1739,8 @@ private fun DataPage(
     onSetMemoryKey: () -> Unit = {},
     memoryKeySet: Boolean = false,
     todoExtractOn: Boolean = false,
+    memoryCrossOn: Boolean = false,
+    onToggleMemoryCross: () -> Unit = {},
     onToggleTodoExtract: () -> Unit = {},
     onExportTodos: () -> Unit = {},
     reasonBack: Boolean = false,
@@ -1751,6 +1757,12 @@ private fun DataPage(
             label = "记忆检索",
             hint = if (memoryOn) "开 · 每轮会从旧记忆里找相关段落" else "关 · 点按打开（需先导入索引包）",
             onClick = onToggleMemory,
+        )
+        SettingsActionRow(
+            label = "跨角色检索",
+            hint = if (memoryCrossOn) "开 · 在所有人旧记忆里搜（测试用）"
+            else "关 · 只查她自己的旧记忆 · 点按打开（测试用）",
+            onClick = onToggleMemoryCross,
         )
         SettingsActionRow(
             label = "自动抽待办",

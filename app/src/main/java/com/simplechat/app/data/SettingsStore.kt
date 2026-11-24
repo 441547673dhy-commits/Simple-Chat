@@ -220,6 +220,9 @@ data class StoredSettings(
      */
     val todoExtract: Boolean = false,
 
+    /** 跨角色检索（测试用）：不按 owner 过滤，在全部旧记忆里搜。默认关。 */
+    val memoryCrossRole: Boolean = false,
+
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
 
@@ -299,6 +302,7 @@ class SettingsStore(
             memoryModel = prefs[Keys.MEMORY_MODEL] ?: "BAAI/bge-m3",
             memoryTopK = prefs[Keys.MEMORY_TOPK] ?: 5,
             todoExtract = prefs[Keys.TODO_EXTRACT] ?: false,
+            memoryCrossRole = prefs[Keys.MEMORY_CROSS] ?: false,
 
         )
     }
@@ -453,6 +457,10 @@ class SettingsStore(
     suspend fun memoryKey(): String =
         preferences.data.first()[Keys.MEMORY_KEY_ENC]
             ?.takeIf { it.isNotBlank() }?.let { SecretBox.decrypt(it) } ?: ""
+
+    suspend fun setMemoryCrossRole(value: Boolean) {
+        preferences.edit { it[Keys.MEMORY_CROSS] = value }
+    }
 
     suspend fun setTodoExtract(value: Boolean) {
         preferences.edit { it[Keys.TODO_EXTRACT] = value }
@@ -923,6 +931,7 @@ class SettingsStore(
         val MEMORY_KEY_ENC = stringPreferencesKey("memory_key_enc")
         val MEMORY_TOPK = intPreferencesKey("memory_topk")
         val TODO_EXTRACT = booleanPreferencesKey("todo_extract")
+        val MEMORY_CROSS = booleanPreferencesKey("memory_cross_role")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")
 
