@@ -295,6 +295,7 @@ class SettingsStore(
             groupBudgetChars = prefs[Keys.GROUP_BUDGET] ?: 120_000,
             contextTailChars = prefs[Keys.CONTEXT_TAIL] ?: 30_000,
             groupShowThinking = prefs[Keys.GROUP_SHOW_THINK] ?: false,
+            windowMaxCount = prefs[Keys.WINDOW_MAX_COUNT] ?: 3000,
             memoryEnabled = prefs[Keys.MEMORY_ENABLED] ?: false,
             memoryBaseUrl = prefs[Keys.MEMORY_BASE] ?: "https://api.siliconflow.cn/v1",
             memoryModel = prefs[Keys.MEMORY_MODEL] ?: "BAAI/bge-m3",
@@ -464,6 +465,12 @@ class SettingsStore(
     suspend fun memoryCrossRoleFor(conversationId: String?): Boolean =
         if (conversationId.isNullOrBlank()) false
         else preferences.data.first()[booleanPreferencesKey("memory_cross_$conversationId")] ?: false
+
+    /**
+     * 窗口按**条数**算（他的方案：3000 条），0 = 沿用字符预算。
+     * 条数是"她有几句话在场"，字符是"占多少内存"——他要求用文本单位。
+     */
+    val windowMaxCount: Int = 3000,
 
     /** 钉住的消息 id（按会话）。被钉的永不淘汰。 */
     suspend fun pinnedIdsFor(conversationId: String?): Set<String> {

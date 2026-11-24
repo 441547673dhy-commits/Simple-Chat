@@ -577,6 +577,8 @@ private fun MessageRow(
                 onContinue = onContinue,
                 onSpeak = onSpeak,
                 onEdit = onEdit,
+                pinned = message.id in pinnedIds,
+                onTogglePin = { onTogglePin(message) },
                 onDelete = onDelete,
                 onVariantChange = onVariantChange,
             )
@@ -1122,7 +1124,7 @@ private fun MessageActions(
         }
         ActionIcon(
             AppIcons.Pin,
-            if (message.id in pinnedIds) "取消钉住（不再永远保留）" else "钉住（永远留在窗口里）",
+            if (pinned) "取消钉住（不再永远保留）" else "钉住（永远留在窗口里）",
             onTogglePin,
             colors,
         )
