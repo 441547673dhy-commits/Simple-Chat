@@ -220,8 +220,6 @@ data class StoredSettings(
      */
     val todoExtract: Boolean = false,
 
-    /** 跨角色检索（测试用）：不按 owner 过滤，在全部旧记忆里搜。默认关。 */
-    val memoryCrossRole: Boolean = false,
 
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
@@ -302,7 +300,6 @@ class SettingsStore(
             memoryModel = prefs[Keys.MEMORY_MODEL] ?: "BAAI/bge-m3",
             memoryTopK = prefs[Keys.MEMORY_TOPK] ?: 5,
             todoExtract = prefs[Keys.TODO_EXTRACT] ?: false,
-            memoryCrossRole = prefs[Keys.MEMORY_CROSS] ?: false,
 
         )
     }
@@ -458,8 +455,19 @@ class SettingsStore(
         preferences.data.first()[Keys.MEMORY_KEY_ENC]
             ?.takeIf { it.isNotBlank() }?.let { SecretBox.decrypt(it) } ?: ""
 
-    suspend fun setMemoryCrossRole(value: Boolean) {
-        preferences.edit { it[Keys.MEMORY_CROSS] = value }
+    /**
+     * 跨角色检索（**按会话**，测试用）。
+     *
+     * 为什么不做成全局：曾因全局开关忘记关闭，导致 2号 检索到别人的记忆（串味）。
+     * 按会话之后，最坏也只污染那一条测试会话。
+     */
+    suspend fun memoryCrossRoleFor(conversationId: String?): Boolean =
+        if (conversationId.isNullOrBlank()) false
+        else preferences.data.first()[booleanPreferencesKey("memory_cross_$conversationId")] ?: false
+
+    suspend fun setMemoryCrossRole(conversationId: String?, value: Boolean) {
+        if (conversationId.isNullOrBlank()) return
+        preferences.edit { it[booleanPreferencesKey("memory_cross_$conversationId")] = value }
     }
 
     suspend fun setTodoExtract(value: Boolean) {
@@ -931,7 +939,6 @@ class SettingsStore(
         val MEMORY_KEY_ENC = stringPreferencesKey("memory_key_enc")
         val MEMORY_TOPK = intPreferencesKey("memory_topk")
         val TODO_EXTRACT = booleanPreferencesKey("todo_extract")
-        val MEMORY_CROSS = booleanPreferencesKey("memory_cross_role")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")
 

@@ -2349,7 +2349,8 @@ class ChatViewModel(
                     snapshot.memoryBaseUrl, key, snapshot.memoryModel, question,
                 ) ?: return@runCatching
                 // owner 用她绑定的人格文件名前缀（1号-上下文.md → 1号）
-                val owner = if (snapshot.memoryCrossRole) null else
+                val crossRole = settingsStore.memoryCrossRoleFor(currentConversationId)
+                val owner = if (crossRole) null else
                     com.simplechat.app.ui.settings.personaDisplayName(
                         settingsStore.personaFileUriFor(currentConversationId),
                     ).substringBefore('-').takeIf { it.isNotBlank() && it != "未绑定" }

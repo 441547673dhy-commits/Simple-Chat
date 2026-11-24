@@ -232,6 +232,7 @@ fun SettingsScreen(
     var memoryKeySet by remember { mutableStateOf(false) }
     var showMemoryKeyDialog by remember { mutableStateOf(false) }
     var memoryKeyDraft by remember { mutableStateOf("") }
+    var memoryCross by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val store = container.settingsStore
@@ -239,6 +240,9 @@ fun SettingsScreen(
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         memoryKeySet = store.memoryKey().isNotBlank()
+    }
+    androidx.compose.runtime.LaunchedEffect(conversationId) {
+        memoryCross = store.memoryCrossRoleFor(conversationId)
     }
 
     if (showMemoryKeyDialog) {
@@ -830,9 +834,12 @@ fun SettingsScreen(
                                 scope.launch { store.setMemoryEnabled(!stored.memoryEnabled) }
                             },
                             todoExtractOn = stored.todoExtract,
-                            memoryCrossOn = stored.memoryCrossRole,
+                            memoryCrossOn = memoryCross,
                             onToggleMemoryCross = {
-                                scope.launch { store.setMemoryCrossRole(!stored.memoryCrossRole) }
+                                scope.launch {
+                                    store.setMemoryCrossRole(conversationId, !memoryCross)
+                                    memoryCross = store.memoryCrossRoleFor(conversationId)
+                                }
                             },
                             onToggleTodoExtract = {
                                 scope.launch { store.setTodoExtract(!stored.todoExtract) }
