@@ -1131,7 +1131,7 @@ class ChatViewModel(
         val maxPerParagraph = if (level >= 3) 1 else if (level == 2) 2 else 3
         return text.split("\n").joinToString("\n") { line ->
             var seen = 0
-            line.replace("极其") { m ->
+            Regex("极其").replace(line) { m ->
                 seen++
                 if (seen <= maxPerParagraph) m.value else ""
             }.replace("  ", " ").trimEnd()
