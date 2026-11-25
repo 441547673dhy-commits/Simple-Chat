@@ -3474,6 +3474,7 @@ private fun GroupLogPage(
     var speaking by remember { mutableStateOf("") }
     var stopRequested by remember { mutableStateOf(false) }
     var showConversationPicker by remember { mutableStateOf(false) }
+    var showMemberManager by remember { mutableStateOf(false) }
     var backfillOnAdd by remember { mutableStateOf(false) }
     var atTarget by remember { mutableStateOf<String?>(null) }
     var atPickerOpen by remember { mutableStateOf(false) }
@@ -3488,8 +3489,16 @@ private fun GroupLogPage(
         )
     }
 
-    LaunchedEffect(Unit) {
-        store.groupMembers.firstOrNull()?.let { members = it }
+    // 成员按群分开：换了群文件就重新载入该群的成员
+    LaunchedEffect(uriString) {
+        members = if (uriString.isBlank()) emptyList() else store.groupMembersFor(uriString)
+    }
+
+    fun persistMembers(list: List<com.simplechat.app.data.GroupMember>) {
+        members = list
+        if (uriString.isNotBlank()) {
+            scope.launch { store.setGroupMembersFor(uriString, list) }
+        }
     }
 
     val importPicker = rememberLauncherForActivityResult(
@@ -3505,7 +3514,7 @@ private fun GroupLogPage(
             }
             val merged = (members + incoming).distinctBy { it.name }
             members = merged
-            store.setGroupMembers(merged)
+            persistMembers(merged)
             android.widget.Toast.makeText(context, "已导入 " + incoming.size + " 个", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
@@ -3531,7 +3540,7 @@ private fun GroupLogPage(
                                     members = members.map {
                                         if (it.name == m.name) it.copy(thinking = on) else it
                                     }
-                                    scope.launch { store.setGroupMembers(members) }
+                                    scope.launch { if (uriString.isNotBlank()) store.setGroupMembersFor(uriString, members) }
                                 },
                             )
                         }
@@ -3559,6 +3568,38 @@ private fun GroupLogPage(
         )
     }
 
+    if (showMemberManager) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showMemberManager = false },
+            title = { Text("群成员（" + members.size + "）") },
+            text = {
+                Column {
+                    if (members.isEmpty()) {
+                        Text("这个群还没有成员。", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    members.forEach { m ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(m.name, modifier = Modifier.weight(1f))
+                            TextButton(onClick = {
+                                // 删除成员只影响这个群的名单，不动她的会话与档案
+                                persistMembers(members.filter { it.name != m.name })
+                            }) { Text("移除") }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMemberManager = false
+                    showConversationPicker = true
+                }) { Text("＋ 添加成员") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMemberManager = false }) { Text("完成") }
+            },
+        )
+    }
+
     if (showConversationPicker) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showConversationPicker = false },
@@ -3576,7 +3617,7 @@ private fun GroupLogPage(
                                 val name = c.title.take(12).ifBlank { "成员" }
                                 members = members.filter { it.name != name } +
                                     com.simplechat.app.data.GroupMember(name, inject, c.id)
-                                store.setGroupMembers(members)
+                                if (uriString.isNotBlank()) store.setGroupMembersFor(uriString, members)
                                 // 补看历史：游标已置 0，这里立刻同步一次
                                 if (backfillOnAdd && uriString.isNotBlank()) {
                                     runCatching { runner.syncIntoConversations(uriString, members, "大馋鬼") }
@@ -3658,7 +3699,7 @@ private fun GroupLogPage(
             SettingsActionRow(
                 label = "群成员（" + members.size + "）",
                 hint = members.joinToString("、") { it.name }.ifBlank { "还没加人 · 点按从会话里选" },
-                onClick = { showConversationPicker = true },
+                onClick = { showMemberManager = true },
             )
             RowDivider()
             RowDivider()

@@ -359,6 +359,29 @@ class SettingsStore(
         preferences.edit { it[Keys.GROUP_MEMBERS] = GroupMembers.encode(list) }
     }
 
+    /*
+     * 按群分开的成员表（2026-11-26 起）。
+     *
+     * 以前成员是全局一份 → 新建一个群文件，成员还是原来那批，
+     * 想"单独拉一个人测"根本做不到。现在 key 里带群文件的指纹。
+     */
+    private fun groupKey(uri: String): String =
+        "group_members_" + uri.hashCode().toUInt().toString(16)
+
+    /** 该群自己的成员；从没设过时回退到旧的全局表（老数据不丢）。 */
+    suspend fun groupMembersFor(uri: String): List<GroupMember> {
+        val prefs = preferences.data.first()
+        val perGroup = prefs[stringPreferencesKey(groupKey(uri))]
+        if (perGroup != null) return GroupMembers.decode(perGroup)
+        return GroupMembers.decode(prefs[Keys.GROUP_MEMBERS].orEmpty())
+    }
+
+    suspend fun setGroupMembersFor(uri: String, list: List<GroupMember>) {
+        preferences.edit {
+            it[stringPreferencesKey(groupKey(uri))] = GroupMembers.encode(list)
+        }
+    }
+
     /** 群聊文件的 URI（全局只一个，群聊页打开时自动载入）。 */
     val groupFileUri: Flow<String> = preferences.data.map { it[Keys.GROUP_FILE].orEmpty() }
 
