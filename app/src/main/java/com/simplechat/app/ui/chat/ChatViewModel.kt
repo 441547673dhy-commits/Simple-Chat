@@ -1081,12 +1081,14 @@ class ChatViewModel(
     ): List<UiMessage> {
         if (list.size <= maxCount) return list
         val over = list.size - maxCount
-        val headSize = 500 + over
+        // 一次踢够 200 条：滑动窗口每轮只滑 1 条会把前缀缓存全打碎（实测差 30 倍）
+        val batch = ((over + 199) / 200) * 200
+        val headSize = 500 + batch
         val head = list.take(minOf(headSize, list.size))
         val evict = head
             .filter { it.id !in pinned }
             .sortedBy { importanceOf(it) }
-            .take(over)
+            .take(batch)
             .map { it.id }
             .toSet()
         // 全被钉住时踢不动，就原样发（宁可超，也不偷偷丢钉子）
@@ -1115,6 +1117,25 @@ class ChatViewModel(
             if (t.lowercase().contains(it)) s += 1
         }
         return s + minOf(t.length / 500, 2)
+    }
+
+    /**
+     * 「极其」去重：同一段落里只留第一个，其余删掉。
+     *
+     * 背景：她的历史里满屏「极其」，模型是**模仿**而不是服从提示词，
+     * 实测 3号 平均 22.4 次/轮。配额提示词只能减小概率，不能保证。
+     * 这里做最后一道闸，且只是"删多余的"，不改句子结构。
+     */
+    private fun collapseGuardWord(text: String, level: Int): String {
+        if (level <= 0 || text.isBlank()) return text
+        val maxPerParagraph = if (level >= 3) 1 else if (level == 2) 2 else 3
+        return text.split("\n").joinToString("\n") { line ->
+            var seen = 0
+            line.replace("极其") { m ->
+                seen++
+                if (seen <= maxPerParagraph) m.value else ""
+            }.replace("  ", " ").trimEnd()
+        }
     }
 
     /** 钉住/取消钉住一条消息。 */
@@ -1923,7 +1944,14 @@ class ChatViewModel(
             val seconds = (finishedAt - startedAt).coerceAtLeast(1) / 1000f
             // 粗估：中文约 1 token ≈ 1.6 字符，仅用于性能仪表展示
             val tps = if (contentChars > 0) (contentChars / 1.6f) / seconds else null
-            val finalContent = accumulator?.answer ?: contentText
+            // 「极其」硬过滤（他 2026-11-26 要的 A 方案）：提示词管不住时，最后一道闸
+            val guardLevel = runCatching {
+                settingsStore.guardWordLevelFor(currentConversationId)
+            }.getOrDefault(0)
+            val finalContent = collapseGuardWord(
+                accumulator?.answer ?: contentText,
+                guardLevel,
+            )
             val finalReasoning = accumulator?.thinking ?: reasoningText
             /*
              * **真实**思考时长 = 首条思维链 → 首条正文。
