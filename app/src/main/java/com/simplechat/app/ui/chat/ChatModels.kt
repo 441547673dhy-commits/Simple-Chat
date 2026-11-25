@@ -179,6 +179,10 @@ data class ContextStats(
     /** 累计思考时长（秒）。 */
     val totalThinkingSeconds: Long?,
     val hasCompaction: Boolean,
+    /** 本次实际会发出去的消息条数（诊断用：核对"窗口条数"有没有生效）。 */
+    val outgoingCount: Int = 0,
+    /** 设置的窗口条数上限；0 = 字符模式。 */
+    val windowCount: Int = 0,
 ) {
     /** 占用比例，0f..1f。 */
     val ratio: Float

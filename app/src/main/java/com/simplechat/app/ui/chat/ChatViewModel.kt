@@ -1273,6 +1273,8 @@ class ChatViewModel(
             windowTokens = settings.model.contextWindow,
             messageCount = messages.size,
             totalTokens = TokenEstimate.ofAll(allTexts),
+            outgoingCount = outgoing.size,
+            windowCount = input.windowMaxCount,
             compactedTokenSaving = run {
                 if (active == null) return@run 0
                 val cut = messages.indexOfFirst { it.id == active.throughMessageId }

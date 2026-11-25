@@ -414,6 +414,16 @@ fun ContextPanelContent(
             color = colors.placeholder,
         )
 
+        // 诊断行：条数窗口到底生效没有，一眼能看出来
+        if (stats.windowCount > 0) {
+            Spacer(Modifier.size(4.dp))
+            Text(
+                text = "实际发送 ${stats.outgoingCount} 条（上限 ${stats.windowCount} 条）",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.placeholder,
+            )
+        }
+
         if (stats.compactedTokenSaving > 0) {
             Spacer(Modifier.size(6.dp))
             Text(
