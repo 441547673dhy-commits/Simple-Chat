@@ -21,6 +21,10 @@ data class GroupLine(
     val kind: String,
     /** 她的思考过程（可选，只有引擎开启思考时才有）。 */
     val think: String? = null,
+    /** 图片 URI（kind == "image" 时才有）。 */
+    val image: String? = null,
+    /** 图片的文字描述（自动生成，可编辑）——引擎默认只读这个，不重传原图。 */
+    val desc: String? = null,
 )
 
 /**
@@ -60,6 +64,8 @@ object GroupChat {
             text = text,
             kind = str("kind") ?: "say",
             think = str("think"),
+            image = str("image"),
+            desc = str("desc"),
         )
     }
 
@@ -69,7 +75,11 @@ object GroupChat {
      * @return `isSelf=true` 表示这是她自己说的（写成 assistant），否则是别人说的（user）。
      */
     fun render(line: GroupLine, selfName: String, hostName: String = "大馋鬼"): Pair<Boolean, String> =
-        if (line.from == selfName) {
+        if (line.kind == "image") {
+            // 图片行：同步进会话时写成"他发了一张图（描述）"——她的会话是文字，图另存
+            val who = if (line.from == hostName) "" else "[${line.from}] "
+            false to who + "（发了一张图：${line.desc?.take(300) ?: "无描述"}）"
+        } else if (line.from == selfName) {
             true to line.text
         } else if (line.from == hostName) {
             // 他本人的话不给前缀 —— 她要把它当成"他对我说的话"，

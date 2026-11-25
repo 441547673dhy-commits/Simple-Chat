@@ -254,6 +254,9 @@ object GroupRules {
     ): String = lines.joinToString("\n") { line ->
         val who = if (line.from == selfName) "你" else line.from
         val to = line.to?.let { "→$it" } ?: ""
+        if (line.kind == "image") {
+            return@joinToString "$who$to（发了一张图：${line.desc?.take(200) ?: "无描述"}）"
+        }
         val think = if (includeThinking && !line.think.isNullOrBlank()) {
             "（想：" + line.think.take(300) + "）"
         } else ""

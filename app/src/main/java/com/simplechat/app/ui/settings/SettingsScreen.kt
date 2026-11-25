@@ -3658,6 +3658,46 @@ private fun GroupLogPage(
         lines = com.simplechat.app.data.GroupChat.parse(raw)
     }
 
+    // 群聊发图（他 2026-11-26 要的）：选图 → 压缩 → 存公共目录 → 生成描述 → 写一行
+    val groupImagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { picked ->
+        if (picked == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                val att = com.simplechat.app.data.AttachmentImport.image(context, picked)
+                    .getOrNull() ?: run {
+                        android.widget.Toast.makeText(context, "读不到图片", android.widget.Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                val full = com.simplechat.app.data.AttachmentFiles.materialize(context, att)
+                val bytes = android.util.Base64.decode(full.data, android.util.Base64.NO_WRAP)
+                val uri = com.simplechat.app.data.GroupImages.save(context, bytes)
+                if (uri == null) {
+                    android.widget.Toast.makeText(context, "保存图片失败", android.widget.Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                if (uriString.isBlank()) return@launch
+                android.widget.Toast.makeText(context, "正在生成描述…", android.widget.Toast.LENGTH_SHORT).show()
+                val snap = store.flow.first()
+                val desc = com.simplechat.app.data.GroupImageDescriber.describe(
+                    context, app.container.chatApi, snap, att,
+                ) ?: ""
+                val seq = (lines.maxOfOrNull { it.seq } ?: 0) + 1
+                val ts = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
+                val line = "{\"seq\":" + seq + ",\"ts\":\"" + ts + "\",\"from\":\"大馋鬼\",\"to\":null," +
+                    "\"kind\":\"image\",\"text\":\"\",\"image\":" + org.json.JSONObject.quote(uri) +
+                    ",\"desc\":" + org.json.JSONObject.quote(desc) + "}"
+                store.appendGroupLine(uriString, line)
+                runCatching { runner.syncIntoConversations(uriString, members, "大馋鬼") }
+                load(uriString)
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "发图失败：" + (e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+
     // 打开页面时自动载入上次选的群聊文件
     LaunchedEffect(Unit) {
         store.groupFileUri.firstOrNull()?.takeIf { it.isNotBlank() }?.let { saved ->
@@ -3824,6 +3864,29 @@ private fun GroupLogPage(
                                 )
                             }
                         }
+                        if (line.kind == "image" && !line.image.isNullOrBlank()) {
+                            // 图片气泡：缩略图 + 自动描述（描述可以后来改，先只显示）
+                            val att = remember(line.image) {
+                                line.image?.let { com.simplechat.app.data.GroupImages.load(context, it) }
+                            }
+                            if (att != null) {
+                                com.simplechat.app.ui.chat.ImageThumb(att, 180.dp) {}
+                            } else {
+                                Text(
+                                    text = "（图片原件缺失）",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LocalChatColors.current.placeholder,
+                                )
+                            }
+                            if (!line.desc.isNullOrBlank()) {
+                                Text(
+                                    text = line.desc,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LocalChatColors.current.placeholder,
+                                    modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp),
+                                )
+                            }
+                        } else {
                         Text(
                             text = line.text,
                             style = MaterialTheme.typography.bodyMedium,
@@ -3838,6 +3901,7 @@ private fun GroupLogPage(
                                 )
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                         )
+                        }
                     }
                 }
             }
@@ -3915,6 +3979,15 @@ private fun GroupLogPage(
                 TextButton(onClick = {
                     if (atTarget != null) atTarget = null else atPickerOpen = true
                 }) { Text(if (atTarget != null) "×" else "@") }
+                TextButton(
+                    onClick = {
+                        groupImagePicker.launch(
+                            androidx.activity.result.PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly,
+                            ),
+                        )
+                    },
+                ) { Text("图") }
                 androidx.compose.material3.OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it },

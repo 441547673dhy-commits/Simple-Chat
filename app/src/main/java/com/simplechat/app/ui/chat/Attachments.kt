@@ -193,7 +193,7 @@ private fun RemoveBadge(onRemove: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ImageThumb(spec: Attachment, size: Dp, onClick: () -> Unit) {
+fun ImageThumb(spec: Attachment, size: Dp, onClick: () -> Unit) {
     val colors = LocalChatColors.current
     val surface = LocalAttachmentSurface.current
     val density = LocalDensity.current
