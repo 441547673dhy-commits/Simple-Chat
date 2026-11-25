@@ -368,12 +368,16 @@ class SettingsStore(
     private fun groupKey(uri: String): String =
         "group_members_" + uri.hashCode().toUInt().toString(16)
 
-    /** 该群自己的成员；从没设过时回退到旧的全局表（老数据不丢）。 */
+    /**
+     * 该群自己的成员。
+     *
+     * **不再回退到旧的全局表**：新群必须是空名单，否则"单独拉一个人测试"做不到。
+     * 2026-11-26 之前的全局成员仍留在 [Keys.GROUP_MEMBERS] 里（没删），需要时用
+     * 「导入成员表」把 `群成员-*.json` 导回来。
+     */
     suspend fun groupMembersFor(uri: String): List<GroupMember> {
-        val prefs = preferences.data.first()
-        val perGroup = prefs[stringPreferencesKey(groupKey(uri))]
-        if (perGroup != null) return GroupMembers.decode(perGroup)
-        return GroupMembers.decode(prefs[Keys.GROUP_MEMBERS].orEmpty())
+        val perGroup = preferences.data.first()[stringPreferencesKey(groupKey(uri))] ?: return emptyList()
+        return GroupMembers.decode(perGroup)
     }
 
     suspend fun setGroupMembersFor(uri: String, list: List<GroupMember>) {
