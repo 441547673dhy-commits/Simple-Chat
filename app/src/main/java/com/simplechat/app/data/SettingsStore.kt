@@ -202,8 +202,16 @@ data class StoredSettings(
      */
     val groupShowThinking: Boolean = false,
 
-    /** 窗口按**条数**算（他 2026-11-25 定：3000 条），0 = 沿用字符预算。 */
-    val windowMaxCount: Int = 3000,
+    /**
+     * 窗口上限（**token**，模型无关的单位）。
+     *
+     * 0 = 自动：取当前模型上下文窗口的 80%（换模型时窗口跟着变，不用手调）。
+     * 他 2026-11-29 定的方向：单位用 token，不用"条"或"字符"。
+     */
+    val windowMaxTokens: Int = 0,
+
+    /** 旧的按条数窗口；仅当 [windowMaxTokens] 为 0 且这里 > 0 时生效。 */
+    val windowMaxCount: Int = 0,
 
     /**
      * 记忆检索（向量）。默认**关**——它要调外部向量服务、并把一段对话发出去。
@@ -298,7 +306,8 @@ class SettingsStore(
             groupBudgetChars = prefs[Keys.GROUP_BUDGET] ?: 120_000,
             contextTailChars = prefs[Keys.CONTEXT_TAIL] ?: 30_000,
             groupShowThinking = prefs[Keys.GROUP_SHOW_THINK] ?: false,
-            windowMaxCount = prefs[Keys.WINDOW_MAX_COUNT] ?: 3000,
+            windowMaxTokens = prefs[Keys.WINDOW_MAX_TOKENS] ?: 0,
+            windowMaxCount = prefs[Keys.WINDOW_MAX_COUNT] ?: 0,
             memoryEnabled = prefs[Keys.MEMORY_ENABLED] ?: false,
             memoryBaseUrl = prefs[Keys.MEMORY_BASE] ?: "https://api.siliconflow.cn/v1",
             memoryModel = prefs[Keys.MEMORY_MODEL] ?: "BAAI/bge-m3",
@@ -624,6 +633,10 @@ class SettingsStore(
         else -> ""
     }
 
+
+    suspend fun setWindowMaxTokens(tokens: Int) {
+        preferences.edit { it[Keys.WINDOW_MAX_TOKENS] = tokens }
+    }
 
     /** 发送预算（字符）。见 [StoredSettings.recentBudgetChars]。 */
     suspend fun setRecentBudgetChars(chars: Int) {
@@ -997,6 +1010,7 @@ class SettingsStore(
         val MEMORY_KEY_ENC = stringPreferencesKey("memory_key_enc")
         val MEMORY_TOPK = intPreferencesKey("memory_topk")
         val WINDOW_MAX_COUNT = intPreferencesKey("window_max_count")
+        val WINDOW_MAX_TOKENS = intPreferencesKey("window_max_tokens")
         val TODO_EXTRACT = booleanPreferencesKey("todo_extract")
         val GROUP_FILE = stringPreferencesKey("group_file_uri")
         val GROUP_MEMBERS = stringPreferencesKey("group_members")

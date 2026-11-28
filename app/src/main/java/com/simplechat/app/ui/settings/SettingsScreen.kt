@@ -839,6 +839,13 @@ fun SettingsScreen(
                                 val idx = steps.indexOf(stored.windowMaxCount).takeIf { it >= 0 } ?: 5
                                 scope.launch { store.setWindowMaxCount(steps[(idx + 1) % steps.size]) }
                             },
+                            windowMaxTokens = stored.windowMaxTokens,
+                            onCycleWindowTokens = {
+                                // 0 = 自动（模型窗口 80%）；其余为固定 token 上限
+                                val steps = listOf(0, 200_000, 400_000, 600_000, 800_000, 900_000)
+                                val idx = steps.indexOf(stored.windowMaxTokens).takeIf { it >= 0 } ?: 0
+                                scope.launch { store.setWindowMaxTokens(steps[(idx + 1) % steps.size]) }
+                            },
                             memoryOn = stored.memoryEnabled,
                             memoryKeySet = memoryKeySet,
                             onToggleMemory = {
@@ -1770,8 +1777,10 @@ private fun DataPage(
     onToggleReasonBack: () -> Unit = {},
     contextTail: Int = 30_000,
     onCycleContextTail: () -> Unit = {},
-    windowMaxCount: Int = 3000,
+    windowMaxCount: Int = 0,
     onCycleWindowCount: () -> Unit = {},
+    windowMaxTokens: Int = 0,
+    onCycleWindowTokens: () -> Unit = {},
     onUnbindPersona: () -> Unit = {},
     onUnbindLog: () -> Unit = {},
 ) {
@@ -1908,8 +1917,21 @@ private fun DataPage(
          * 窗口条数：开着「只发送最近内容」时，真正决定发多少条的是它，
          * 「发送预算」那栏在这条路上不生效（他 2026-11-25 验证过）。
          */
+        /*
+         * 窗口上限（token）——他 2026-11-29 定的主单位。
+         * token 与模型无关：换模型时只要这个数不变，窗口大小就跟着新模型走。
+         */
         SettingsActionRow(
-            label = "窗口条数",
+            label = "窗口上限",
+            hint = if (windowMaxTokens <= 0) {
+                "自动：模型窗口的 80%（推荐的未来兼容方式）"
+            } else {
+                "${windowMaxTokens / 10000} 万 token · 点按切换"
+            },
+            onClick = onCycleWindowTokens,
+        )
+        SettingsActionRow(
+            label = "窗口条数（旧）",
             hint = (if (windowMaxCount <= 0) "不限（按字符预算走）" else "$windowMaxCount 条") +
                 " · 全史直发时每条鱼约 45–75 万 token，调小能省能快",
             onClick = onCycleWindowCount,

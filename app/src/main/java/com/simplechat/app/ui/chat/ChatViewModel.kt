@@ -1074,6 +1074,35 @@ class ChatViewModel(
      *    现在按 [maxCount] 真正腾出 `size - maxCount` 条。
      * 2. 候选区也要跟着变大（最旧的 500 + 要腾的条数），否则腾不出足够条数。
      */
+    /**
+     * 按 **token 预算** 选窗口（单位与模型无关，他 2026-11-29 定）。
+     *
+     * 从最新往回累加，到预算为止；钉住的消息**不占预算**、永远留在窗口里。
+     * budget <= 0 返回 null（表示不启用 token 模式）。
+     */
+    private fun selectByTokens(
+        list: List<UiMessage>,
+        budget: Int,
+        pinned: Set<String>,
+    ): List<UiMessage>? {
+        if (budget <= 0) return null
+        var used = 0
+        var cut = list.size
+        while (cut > 0) {
+            val m = list[cut - 1]
+            if (m.id in pinned) { cut--; continue }
+            val cost = TokenEstimate.of(m.content) + attachmentTokenEstimate(m.attachments)
+            if (used + cost > budget) break
+            used += cost
+            cut--
+        }
+        if (cut == 0) return list
+        // 窗口外还钉着的，宁可超预算也要带回来（钉子 = 他手标的"不能丢"）
+        val keepPinned = list.subList(0, cut).filter { it.id in pinned }.map { it.id }.toSet()
+        if (keepPinned.isEmpty()) return list.subList(cut, list.size)
+        return list.filterIndexed { i, m -> i >= cut || m.id in keepPinned }
+    }
+
     private fun selectByImportance(
         list: List<UiMessage>,
         maxCount: Int,
@@ -1224,6 +1253,7 @@ class ChatViewModel(
         val compaction: CompactionEntity?,
         val budgetChars: Int,
         val windowMaxCount: Int,
+        val windowMaxTokens: Int,
     ) {
         private val size = messages.size
         private val idsHash = messages.fold(0) { acc, m -> acc * 31 + m.id.hashCode() }
@@ -1270,6 +1300,9 @@ class ChatViewModel(
                  * 2026-11-25 的 bug：圆环只认字符预算，显示 67k，实际发出去 66.2 万 ——
                  * 差 10 倍，他看圆环完全判断不了"会不会超窗口"。
                  */
+                input.windowMaxTokens > 0 ->
+                    selectByTokens(list, (input.windowMaxTokens * 1f).toInt(), pinnedIds)
+                        ?: selectByImportance(list, input.windowMaxCount, pinnedIds)
                 input.windowMaxCount > 0 -> selectByImportance(list, input.windowMaxCount, pinnedIds)
                 else -> trimToRecentBudget(list, cappedBudget(input.budgetChars))
             }
@@ -2500,8 +2533,12 @@ class ChatViewModel(
          * 评分只看文本（情绪/约定/亲密 > 健康 > 指令 > 技术 > 日常），
          * 不涉及时间单位 —— 他明确要求用文本口径。
          */
-        val outgoingList = if (snapshot.windowMaxCount > 0 && recentOnly) {
-            selectByImportance(fullList, snapshot.windowMaxCount, pinnedIds)
+        // 单位优先级：token（推荐）→ 条数（旧）→ 字符预算（最旧）
+        val tokenBudget = if (snapshot.windowMaxTokens > 0) snapshot.windowMaxTokens
+            else (snapshot.model.contextWindow * 0.8f).toInt()
+        val outgoingList = if (recentOnly && (snapshot.windowMaxTokens > 0 || snapshot.windowMaxCount > 0)) {
+            selectByTokens(fullList, tokenBudget, pinnedIds)
+                ?: selectByImportance(fullList, snapshot.windowMaxCount, pinnedIds)
         } else if (recentOnly) {
             trimToRecentBudget(fullList, cappedBudget(snapshot.recentBudgetChars))
         } else fullList
